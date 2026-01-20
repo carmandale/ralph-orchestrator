@@ -51,10 +51,9 @@ core:
     // Should exit with error
     assert!(!output.status.success());
 
-    // Should contain error message about missing scratchpad
+    // Should contain error message about missing session
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Cannot resume: scratchpad not found"));
-    assert!(stderr.contains("Use `ralph run` to start a new loop"));
+    assert!(stderr.contains("No current session") || stderr.contains("cannot resume"));
 
     Ok(())
 }
@@ -63,6 +62,20 @@ core:
 fn test_resume_with_existing_scratchpad() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let temp_path = temp_dir.path();
+
+    // Create session-based directory structure
+    let sessions_dir = temp_path.join(".ralph-o").join("sessions");
+    fs::create_dir_all(&sessions_dir)?;
+
+    let session_dir = sessions_dir.join("001-test-session");
+    fs::create_dir_all(&session_dir)?;
+
+    // Create current symlink
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        symlink("001-test-session", sessions_dir.join("current"))?;
+    }
 
     // Create a basic config file with short timeout and fast backend
     let config_content = r#"
@@ -75,19 +88,10 @@ event_loop:
 cli:
   backend: "custom"
   command: "true"
-
-core:
-  scratchpad: ".agent/scratchpad.md"
 "#;
-    fs::write(temp_path.join("ralph.yml"), config_content)?;
+    fs::write(temp_path.join(".ralph-o").join("config.yml"), config_content)?;
 
-    // Create a prompt file
-    fs::write(temp_path.join("PROMPT.md"), "Test task")?;
-
-    // Create the .agent directory and scratchpad file
-    let agent_dir = temp_path.join(".agent");
-    fs::create_dir_all(&agent_dir)?;
-
+    // Create session scratchpad
     let scratchpad_content = r"# Task List
 
 ## Current Tasks
@@ -98,13 +102,14 @@ core:
 ## Notes
 Previous work completed on feature B.
 ";
-    fs::write(agent_dir.join("scratchpad.md"), scratchpad_content)?;
+    fs::write(session_dir.join("scratchpad.md"), scratchpad_content)?;
+
+    // Create PROMPT.md in session
+    fs::write(session_dir.join("PROMPT.md"), "Test task")?;
 
     // Run ralph resume
     let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
         .arg("resume")
-        .arg("--config")
-        .arg(temp_path.join("ralph.yml"))
         .current_dir(temp_path)
         .output()?;
 
@@ -112,7 +117,7 @@ Previous work completed on feature B.
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Should find the existing scratchpad (logged via tracing to stdout)
-    assert!(stdout.contains("Found existing scratchpad"));
+    assert!(stdout.contains("Resuming session"));
 
     Ok(())
 }
@@ -276,6 +281,20 @@ fn test_resume_logs_scratchpad_found() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let temp_path = temp_dir.path();
 
+    // Create session-based directory structure
+    let sessions_dir = temp_path.join(".ralph-o").join("sessions");
+    fs::create_dir_all(&sessions_dir)?;
+
+    let session_dir = sessions_dir.join("001-test-session");
+    fs::create_dir_all(&session_dir)?;
+
+    // Create current symlink
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        symlink("001-test-session", sessions_dir.join("current"))?;
+    }
+
     // Create config with short timeout and fast backend
     let config_content = r#"
 event_loop:
@@ -287,20 +306,11 @@ event_loop:
 cli:
   backend: "custom"
   command: "true"
-
-core:
-  scratchpad: ".agent/scratchpad.md"
 "#;
 
-    fs::write(temp_path.join("ralph.yml"), config_content)?;
+    fs::write(temp_path.join(".ralph-o").join("config.yml"), config_content)?;
 
-    // Create a prompt file
-    fs::write(temp_path.join("PROMPT.md"), "Test task")?;
-
-    // Create the .agent directory and scratchpad with unique content
-    let agent_dir = temp_path.join(".agent");
-    fs::create_dir_all(&agent_dir)?;
-
+    // Create session scratchpad with unique content
     let scratchpad_content = r"# Existing Task List
 
 ## Current Tasks
@@ -310,21 +320,22 @@ core:
 ## Notes
 This scratchpad contains UNIQUE_CONTENT_MARKER for testing.
 ";
-    fs::write(agent_dir.join("scratchpad.md"), scratchpad_content)?;
+    fs::write(session_dir.join("scratchpad.md"), scratchpad_content)?;
+
+    // Create PROMPT.md in session
+    fs::write(session_dir.join("PROMPT.md"), "Test task")?;
 
     // Run ralph resume
     let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
         .arg("resume")
-        .arg("--config")
-        .arg(temp_path.join("ralph.yml"))
         .current_dir(temp_path)
         .output()?;
 
     let _stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Should log that it found the existing scratchpad (logged via tracing to stdout)
-    assert!(stdout.contains("Found existing scratchpad"));
+    // Should log that it's resuming the session (logged via tracing to stdout)
+    assert!(stdout.contains("Resuming session"));
 
     Ok(())
 }

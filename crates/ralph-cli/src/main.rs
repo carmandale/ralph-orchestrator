@@ -321,6 +321,11 @@ struct RunArgs {
 /// user can run `ralph resume` to restart reading existing scratchpad."
 #[derive(Parser, Debug)]
 struct ResumeArgs {
+    /// Session ID or number to resume (e.g., "001", "001-feature-name")
+    /// If not specified, resumes the current session
+    #[arg(long)]
+    session: Option<String>,
+
     /// Override max iterations (from current position)
     #[arg(long)]
     max_iterations: Option<u32>,
@@ -738,16 +743,53 @@ async fn resume_command(
 
     config.normalize();
 
+    // Determine project root from config path (parent of .ralph-o/)
+    let project_root = config_path
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| anyhow::anyhow!("Could not determine project root from config path"))?;
+
+    // Initialize SessionManager
+    let session_manager = SessionManager::new(project_root);
+
+    // Get the session to resume
+    let session = if let Some(session_id_or_num) = &args.session {
+        // User specified a session - get it (returns Result<Session>)
+        session_manager
+            .get(session_id_or_num)
+            .with_context(|| format!("Failed to get session '{}'", session_id_or_num))?
+    } else {
+        // No session specified - use current (returns Result<Option<Session>>)
+        session_manager
+            .current()
+            .context("Failed to get current session")?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No current session. Run 'ralph plan' first or use --session to specify one."
+                )
+            })?
+    };
+
+    // Set as current session
+    session_manager
+        .set_current(&session)
+        .context("Failed to set current session")?;
+
+    // Update config to use session paths
+    config.core.scratchpad = session.scratchpad_path().to_string_lossy().to_string();
+    config.core.events_file = session.events_path().to_string_lossy().to_string();
+    config.core.summary_file = session.summary_path().to_string_lossy().to_string();
+
     // Check that scratchpad exists (required for resume)
     let scratchpad_path = std::path::Path::new(&config.core.scratchpad);
     if !scratchpad_path.exists() {
         anyhow::bail!(
-            "Cannot resume: scratchpad not found at '{}'. Use `ralph run` to start a new loop.",
-            config.core.scratchpad
+            "Cannot resume session '{}': scratchpad not found. Session may not have been started yet.",
+            session.id
         );
     }
 
-    info!("Found existing scratchpad at '{}'", config.core.scratchpad);
+    info!("Resuming session '{}' with scratchpad at '{}'", session.id, config.core.scratchpad);
 
     // Apply CLI overrides
     if let Some(max_iter) = args.max_iterations {
