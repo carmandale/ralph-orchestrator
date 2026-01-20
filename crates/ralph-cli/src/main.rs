@@ -22,7 +22,7 @@ use ralph_adapters::{
 };
 use ralph_core::{
     EventHistory, EventLogger, EventLoop, EventParser, EventRecord, RalphConfig, Record,
-    SessionRecorder, SummaryWriter, TerminationReason,
+    Session, SessionManager, SessionRecorder, SummaryWriter, TerminationReason,
 };
 use ralph_proto::{Event, HatId};
 use ralph_tui::Tui;
@@ -254,6 +254,10 @@ struct InitArgs {
 /// Arguments for the run subcommand.
 #[derive(Parser, Debug)]
 struct RunArgs {
+    /// Session ID or number to use (e.g., "001", "001-feature-name")
+    #[arg(long)]
+    session: Option<String>,
+
     /// Inline prompt text (mutually exclusive with -P/--prompt-file)
     #[arg(short = 'p', long = "prompt", conflicts_with = "prompt_file")]
     prompt_text: Option<String>,
@@ -484,6 +488,7 @@ async fn main() -> Result<()> {
         None => {
             // Default to run with no overrides (backwards compatibility)
             let args = RunArgs {
+                session: None,
                 prompt_text: None,
                 prompt_file: None,
                 max_iterations: None,
@@ -519,14 +524,69 @@ async fn run_command(
     // Normalize v1 flat fields into v2 nested structure
     config.normalize();
 
+    // Determine project root from config path (parent of .ralph-o/)
+    let project_root = config_path
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| anyhow::anyhow!("Could not determine project root from config path"))?;
+
+    // Initialize SessionManager
+    let session_manager = SessionManager::new(project_root);
+
+    // Determine which session to use based on CLI flags
+    let session: Session = if let Some(prompt_text) = &args.prompt_text {
+        // Create new session from prompt text
+        let session = session_manager
+            .create(prompt_text)
+            .context("Failed to create session from prompt")?;
+
+        // Write prompt to session's PROMPT.md
+        let prompt_path = session.prompt_path();
+        fs::write(&prompt_path, prompt_text)
+            .with_context(|| format!("Failed to write prompt to {:?}", prompt_path))?;
+
+        session_manager
+            .set_current(&session)
+            .context("Failed to set current session")?;
+        info!("Created new session: {}", session.id);
+        session
+    } else if let Some(session_id) = &args.session {
+        // Use specified session
+        let session = session_manager
+            .get(session_id)
+            .context(format!("Session '{}' not found", session_id))?;
+        session_manager
+            .set_current(&session)
+            .context("Failed to set current session")?;
+        info!("Using session: {}", session.id);
+        session
+    } else {
+        // Use current session or error
+        session_manager
+            .current()
+            .context("Failed to get current session")?
+            .ok_or_else(|| anyhow::anyhow!("No current session found. Use -p to create a new session or --session to specify one."))?
+    };
+
+    // Update config to use session paths
+    config.core.scratchpad = session.scratchpad_path().to_string_lossy().to_string();
+    config.core.events_file = session.events_path().to_string_lossy().to_string();
+    config.core.summary_file = session.summary_path().to_string_lossy().to_string();
+
     // Apply CLI overrides (after normalization so they take final precedence)
     // Per spec: CLI -p and -P are mutually exclusive (enforced by clap)
-    if let Some(text) = args.prompt_text {
-        config.event_loop.prompt = Some(text);
-        config.event_loop.prompt_file = String::new(); // Clear file path
+    // Note: prompt_text is handled by session creation above
+    if args.prompt_text.is_some() {
+        // Prompt already stored in session, will be read from session's PROMPT.md
+        config.event_loop.prompt = None;
+        config.event_loop.prompt_file = session.prompt_path().to_string_lossy().to_string();
     } else if let Some(path) = args.prompt_file {
         config.event_loop.prompt_file = path.to_string_lossy().to_string();
         config.event_loop.prompt = None; // Clear inline
+    } else {
+        // Use session's prompt file
+        config.event_loop.prompt_file = session.prompt_path().to_string_lossy().to_string();
+        config.event_loop.prompt = None;
     }
     if let Some(max_iter) = args.max_iterations {
         config.event_loop.max_iterations = max_iter;
@@ -1564,8 +1624,8 @@ async fn run_loop_impl(
             None
         };
 
-    // Initialize event logger for debugging
-    let mut event_logger = EventLogger::default_path();
+    // Initialize event logger for debugging (use session-based path from config)
+    let mut event_logger = EventLogger::new(&config.core.events_file);
 
     // Log initial event (task.start or task.resume)
     let (start_topic, start_triggered) = if resume {

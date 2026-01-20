@@ -634,6 +634,16 @@ pub struct CoreConfig {
     #[serde(default = "default_scratchpad")]
     pub scratchpad: String,
 
+    /// Path to the events log file (JSONL format).
+    /// If `session_id` is set, this is ignored in favor of session path.
+    #[serde(default = "default_events_file")]
+    pub events_file: String,
+
+    /// Path to the summary file (markdown format).
+    /// If `session_id` is set, this is ignored in favor of session path.
+    #[serde(default = "default_summary_file")]
+    pub summary_file: String,
+
     /// Path to the specs directory (source of truth for requirements).
     #[serde(default = "default_specs_dir")]
     pub specs_dir: String,
@@ -647,6 +657,14 @@ pub struct CoreConfig {
 
 fn default_scratchpad() -> String {
     ".agent/scratchpad.md".to_string()
+}
+
+fn default_events_file() -> String {
+    ".agent/events.jsonl".to_string()
+}
+
+fn default_summary_file() -> String {
+    ".agent/summary.md".to_string()
 }
 
 fn default_specs_dir() -> String {
@@ -666,6 +684,8 @@ impl Default for CoreConfig {
         Self {
             session_id: None,
             scratchpad: default_scratchpad(),
+            events_file: default_events_file(),
+            summary_file: default_summary_file(),
             specs_dir: default_specs_dir(),
             guardrails: default_guardrails(),
         }

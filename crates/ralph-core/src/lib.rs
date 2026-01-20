@@ -40,7 +40,7 @@ pub use event_reader::{Event, EventReader, MalformedLine, ParseResult};
 pub use hat_registry::HatRegistry;
 pub use hatless_ralph::{HatInfo, HatTopology, HatlessRalph};
 pub use instructions::InstructionBuilder;
-pub use session::{Session, SessionStatus};
+pub use session::{Session, SessionManager, SessionStatus};
 pub use session_player::{PlayerConfig, ReplayMode, SessionPlayer, TimestampedRecord};
 pub use session_recorder::{Record, SessionRecorder};
 pub use summary_writer::SummaryWriter;
