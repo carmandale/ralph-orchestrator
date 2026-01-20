@@ -190,7 +190,7 @@ struct Cli {
     // Global options (available for all subcommands)
     // ─────────────────────────────────────────────────────────────────────────
     /// Path to configuration file
-    #[arg(short, long, default_value = "ralph.yml", global = true)]
+    #[arg(short, long, default_value = ".ralph-o/config.yml", global = true)]
     config: PathBuf,
 
     /// Verbose output

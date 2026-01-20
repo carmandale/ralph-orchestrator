@@ -10,7 +10,7 @@ use std::path::Path;
 /// Errors that can occur during initialization.
 #[derive(Debug, thiserror::Error)]
 pub enum InitError {
-    #[error("ralph.yml already exists. Use --force to overwrite.")]
+    #[error(".ralph-o/config.yml already exists. Use --force to overwrite.")]
     FileExists,
 
     #[error("Unknown preset '{0}'. Available presets: {1}")]
@@ -21,7 +21,7 @@ pub enum InitError {
     )]
     UnknownBackend(String),
 
-    #[error("Failed to write ralph.yml: {0}")]
+    #[error("Failed to write .ralph-o/config.yml: {0}")]
     WriteError(#[from] std::io::Error),
 
     #[error("Failed to parse/generate YAML: {0}")]
@@ -74,20 +74,35 @@ event_loop:
     )
 }
 
-/// Checks if ralph.yml exists and handles the force flag.
+/// Checks if .ralph-o/config.yml exists and handles the force flag.
+/// Also creates the .ralph-o/ and .ralph-o/sessions/ directories if they don't exist.
 fn check_file_exists(force: bool) -> Result<(), InitError> {
-    let path = Path::new("ralph.yml");
-    if path.exists() && !force {
+    let config_path = Path::new(".ralph-o/config.yml");
+
+    // Create .ralph-o/ directory if it doesn't exist
+    let ralph_dir = Path::new(".ralph-o");
+    if !ralph_dir.exists() {
+        fs::create_dir(ralph_dir)?;
+    }
+
+    // Create .ralph-o/sessions/ directory if it doesn't exist
+    let sessions_dir = ralph_dir.join("sessions");
+    if !sessions_dir.exists() {
+        fs::create_dir(&sessions_dir)?;
+    }
+
+    // Check if config file already exists
+    if config_path.exists() && !force {
         return Err(InitError::FileExists);
     }
     Ok(())
 }
 
-/// Initializes ralph.yml from a minimal backend template.
+/// Initializes .ralph-o/config.yml from a minimal backend template.
 ///
 /// # Arguments
 /// * `backend` - The backend name (claude, kiro, gemini, codex, amp, copilot, opencode, custom)
-/// * `force` - If true, overwrite existing ralph.yml
+/// * `force` - If true, overwrite existing .ralph-o/config.yml
 ///
 /// # Errors
 /// Returns error if file exists (without force) or backend is invalid.
@@ -100,17 +115,17 @@ pub fn init_from_backend(backend: &str, force: bool) -> Result<(), InitError> {
     check_file_exists(force)?;
 
     let content = generate_template(backend);
-    fs::write("ralph.yml", content)?;
+    fs::write(".ralph-o/config.yml", content)?;
 
     Ok(())
 }
 
-/// Initializes ralph.yml from an embedded preset.
+/// Initializes .ralph-o/config.yml from an embedded preset.
 ///
 /// # Arguments
 /// * `preset_name` - The name of the preset to use
 /// * `backend_override` - Optional backend to override the preset's backend
-/// * `force` - If true, overwrite existing ralph.yml
+/// * `force` - If true, overwrite existing .ralph-o/config.yml
 ///
 /// # Errors
 /// Returns error if file exists (without force) or preset doesn't exist.
@@ -139,7 +154,7 @@ pub fn init_from_preset(
         preset.content.to_string()
     };
 
-    fs::write("ralph.yml", content)?;
+    fs::write(".ralph-o/config.yml", content)?;
 
     Ok(())
 }
