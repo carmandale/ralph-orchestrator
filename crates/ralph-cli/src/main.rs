@@ -440,6 +440,10 @@ struct TaskArgs {
     /// Backend to use (overrides config and auto-detection)
     #[arg(short, long, value_name = "BACKEND")]
     backend: Option<String>,
+
+    /// Step number within the plan (e.g., 1, 2, 3)
+    #[arg(long, value_name = "STEP")]
+    step: Option<u32>,
 }
 
 #[tokio::main]
@@ -1196,24 +1200,67 @@ fn task_command(config_path: PathBuf, color_mode: ColorMode, args: TaskArgs) -> 
 
     let use_colors = color_mode.should_use_colors();
 
+    // Determine project root from config path (parent of .ralph-o/)
+    let project_root = config_path
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| anyhow::anyhow!("Could not determine project root from config path"))?;
+
+    // Initialize SessionManager and get current session
+    let session_manager = SessionManager::new(project_root);
+    let session = session_manager
+        .current()
+        .context("Failed to get current session")?
+        .ok_or_else(|| {
+            anyhow::anyhow!("No current session. Run 'ralph plan' first to create a session.")
+        })?;
+
+    // Determine input: use provided input, or default to plan/implementation/plan.md
+    let user_input = if let Some(input) = args.input {
+        Some(input)
+    } else {
+        // Default to session's plan/implementation/plan.md if it exists
+        let default_plan = session.plan_dir().join("implementation").join("plan.md");
+        if default_plan.exists() {
+            Some(format!("file:{}", default_plan.display()))
+        } else {
+            None
+        }
+    };
+
     // Show what we're starting
     if use_colors {
         println!(
-            "{}📋{} Starting {} session...",
+            "{}📋{} Starting {} session: {}{}",
             colors::CYAN,
             colors::RESET,
-            Sop::CodeTaskGenerator.name()
+            Sop::CodeTaskGenerator.name(),
+            session.id,
+            if let Some(step) = args.step {
+                format!(" (step {})", step)
+            } else {
+                String::new()
+            }
         );
     } else {
-        println!("Starting {} session...", Sop::CodeTaskGenerator.name());
+        println!(
+            "Starting {} session: {}{}",
+            Sop::CodeTaskGenerator.name(),
+            session.id,
+            if let Some(step) = args.step {
+                format!(" (step {})", step)
+            } else {
+                String::new()
+            }
+        );
     }
 
     let config = SopRunConfig {
         sop: Sop::CodeTaskGenerator,
-        user_input: args.input,
+        user_input,
         backend_override: args.backend,
         config_path: Some(config_path),
-        session: None, // TODO: Step 8 will implement session support for task command
+        session: Some(session),
     };
 
     sop_runner::run_sop(config).map_err(|e| match e {
