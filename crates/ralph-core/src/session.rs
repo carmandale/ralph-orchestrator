@@ -2,12 +2,14 @@
 //!
 //! This module provides the core `Session` struct that represents a single
 //! ralph-o session, along with `SessionStatus` to track the session lifecycle.
+//! The `SessionManager` handles creating, listing, and retrieving sessions.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use thiserror::Error;
 
 /// Session lifecycle status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -189,6 +191,161 @@ impl Session {
             }
         }
         false
+    }
+}
+
+/// Errors that can occur during session operations.
+#[derive(Debug, Error)]
+pub enum SessionError {
+    /// Session not found.
+    #[error("Session not found: {0}")]
+    NotFound(String),
+
+    /// Failed to create session directory.
+    #[error("Failed to create session directory: {0}")]
+    CreateFailed(String),
+
+    /// Invalid session ID format.
+    #[error("Invalid session ID format: {0}")]
+    InvalidId(String),
+
+    /// I/O error.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Manages ralph-o sessions.
+///
+/// SessionManager handles creating, listing, and retrieving sessions
+/// within a project's `.ralph-o/sessions/` directory.
+pub struct SessionManager {
+    /// Root path of the project.
+    project_root: PathBuf,
+
+    /// Path to the sessions directory (.ralph-o/sessions/).
+    sessions_dir: PathBuf,
+}
+
+impl SessionManager {
+    /// Creates a new SessionManager for the given project root.
+    ///
+    /// The sessions directory is `.ralph-o/sessions/` under the project root.
+    pub fn new<P: AsRef<Path>>(project_root: P) -> Self {
+        let project_root = project_root.as_ref().to_path_buf();
+        let sessions_dir = project_root.join(".ralph-o").join("sessions");
+
+        Self {
+            project_root,
+            sessions_dir,
+        }
+    }
+
+    /// Creates a new session with the given title.
+    ///
+    /// This method:
+    /// 1. Determines the next session number
+    /// 2. Creates a session ID in the format `NNN-title`
+    /// 3. Creates the session directory
+    /// 4. Returns the new Session
+    pub fn create(&self, title: &str) -> Result<Session, SessionError> {
+        let number = self.next_number();
+        let id = format!("{:03}-{}", number, Self::derive_title(title));
+        let session_path = self.sessions_dir.join(&id);
+
+        // Create session directory
+        fs::create_dir_all(&session_path).map_err(|e| {
+            SessionError::CreateFailed(format!("{}: {}", session_path.display(), e))
+        })?;
+
+        Ok(Session::new(&id, session_path))
+    }
+
+    /// Lists all sessions in the sessions directory.
+    ///
+    /// Sessions are returned sorted by session number (oldest first).
+    pub fn list(&self) -> Result<Vec<Session>, SessionError> {
+        if !self.sessions_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut sessions = Vec::new();
+
+        for entry in fs::read_dir(&self.sessions_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                if let Some(id) = path.file_name().and_then(|n| n.to_str()) {
+                    // Only include valid session IDs (NNN-title format)
+                    if Session::number_from_id(id).is_some() {
+                        let mut session = Session::new(id, path.clone());
+                        // Derive status from directory contents
+                        session.status = Session::derive_status(&path);
+                        sessions.push(session);
+                    }
+                }
+            }
+        }
+
+        // Sort by session number
+        sessions.sort_by_key(|s| s.number);
+
+        Ok(sessions)
+    }
+
+    /// Gets a session by ID or number.
+    ///
+    /// Accepts either a full session ID like "001-rest-api"
+    /// or just a number like "1" or "001".
+    pub fn get(&self, id_or_number: &str) -> Result<Session, SessionError> {
+        // Try to parse as a number first
+        if let Ok(number) = id_or_number.parse::<u32>() {
+            // Find session by number
+            let sessions = self.list()?;
+            for session in sessions {
+                if session.number == number {
+                    return Ok(session);
+                }
+            }
+            return Err(SessionError::NotFound(format!("Session number {}", number)));
+        }
+
+        // Otherwise treat as a full ID
+        let session_path = self.sessions_dir.join(id_or_number);
+        if !session_path.exists() {
+            return Err(SessionError::NotFound(id_or_number.to_string()));
+        }
+
+        let mut session = Session::new(id_or_number, session_path.clone());
+        session.status = Session::derive_status(&session_path);
+
+        Ok(session)
+    }
+
+    /// Determines the next session number.
+    ///
+    /// This scans existing sessions and returns max + 1.
+    /// Returns 1 if no sessions exist.
+    fn next_number(&self) -> u32 {
+        self.list()
+            .ok()
+            .and_then(|sessions| sessions.iter().map(|s| s.number).max())
+            .map(|max| max + 1)
+            .unwrap_or(1)
+    }
+
+    /// Derives a kebab-case title from the input string.
+    ///
+    /// This converts the title to lowercase and replaces spaces and
+    /// underscores with hyphens.
+    fn derive_title(title: &str) -> String {
+        title
+            .to_lowercase()
+            .replace(' ', "-")
+            .replace('_', "-")
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '-')
+            .collect()
     }
 }
 
@@ -498,5 +655,259 @@ mod tests {
         let events_path = temp_dir.path().join("events.jsonl");
         fs::write(&events_path, "{\"type\": \"message\"}").unwrap();
         assert!(!Session::check_events_for_failure(&events_path));
+    }
+
+    // --- SessionManager tests ---
+
+    #[test]
+    fn session_manager_new_creates_manager() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+        assert_eq!(manager.project_root, temp_dir.path());
+        assert_eq!(
+            manager.sessions_dir,
+            temp_dir.path().join(".ralph-o").join("sessions")
+        );
+    }
+
+    #[test]
+    fn session_manager_create_creates_first_session() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("rest api").unwrap();
+
+        assert_eq!(session.number, 1);
+        assert_eq!(session.id, "001-rest-api");
+        assert_eq!(session.title, "rest-api");
+        assert!(session.path.exists());
+    }
+
+    #[test]
+    fn session_manager_create_increments_session_number() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session1 = manager.create("first session").unwrap();
+        let session2 = manager.create("second session").unwrap();
+
+        assert_eq!(session1.number, 1);
+        assert_eq!(session2.number, 2);
+        assert_eq!(session1.id, "001-first-session");
+        assert_eq!(session2.id, "002-second-session");
+    }
+
+    #[test]
+    fn session_manager_create_normalizes_title() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("Add User Authentication").unwrap();
+
+        assert_eq!(session.title, "add-user-authentication");
+        assert_eq!(session.id, "001-add-user-authentication");
+    }
+
+    #[test]
+    fn session_manager_list_empty_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let sessions = manager.list().unwrap();
+        assert_eq!(sessions.len(), 0);
+    }
+
+    #[test]
+    fn session_manager_list_returns_sessions() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        manager.create("first").unwrap();
+        manager.create("second").unwrap();
+
+        let sessions = manager.list().unwrap();
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions[0].number, 1);
+        assert_eq!(sessions[1].number, 2);
+    }
+
+    #[test]
+    fn session_manager_list_sorts_by_number() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let sessions_dir = temp_dir.path().join(".ralph-o").join("sessions");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        // Create sessions out of order
+        fs::create_dir(sessions_dir.join("003-third")).unwrap();
+        fs::create_dir(sessions_dir.join("001-first")).unwrap();
+        fs::create_dir(sessions_dir.join("002-second")).unwrap();
+
+        let manager = SessionManager::new(temp_dir.path());
+        let sessions = manager.list().unwrap();
+
+        assert_eq!(sessions.len(), 3);
+        assert_eq!(sessions[0].number, 1);
+        assert_eq!(sessions[1].number, 2);
+        assert_eq!(sessions[2].number, 3);
+    }
+
+    #[test]
+    fn session_manager_list_ignores_invalid_dirs() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let sessions_dir = temp_dir.path().join(".ralph-o").join("sessions");
+        fs::create_dir_all(&sessions_dir).unwrap();
+
+        // Create a valid session
+        fs::create_dir(sessions_dir.join("001-valid")).unwrap();
+        // Create invalid directory names
+        fs::create_dir(sessions_dir.join("invalid")).unwrap();
+        fs::create_dir(sessions_dir.join("no-number")).unwrap();
+
+        let manager = SessionManager::new(temp_dir.path());
+        let sessions = manager.list().unwrap();
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "001-valid");
+    }
+
+    #[test]
+    fn session_manager_list_derives_status() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("test").unwrap();
+        // Create events.jsonl to make status InProgress
+        fs::write(session.events_path(), "{}").unwrap();
+
+        let sessions = manager.list().unwrap();
+        assert_eq!(sessions[0].status, SessionStatus::InProgress);
+    }
+
+    #[test]
+    fn session_manager_get_by_number() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        manager.create("first").unwrap();
+        let created = manager.create("second").unwrap();
+
+        let retrieved = manager.get("2").unwrap();
+        assert_eq!(retrieved.id, created.id);
+        assert_eq!(retrieved.number, 2);
+    }
+
+    #[test]
+    fn session_manager_get_by_padded_number() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let created = manager.create("test").unwrap();
+
+        let retrieved = manager.get("001").unwrap();
+        assert_eq!(retrieved.id, created.id);
+    }
+
+    #[test]
+    fn session_manager_get_by_id() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let created = manager.create("test session").unwrap();
+
+        let retrieved = manager.get("001-test-session").unwrap();
+        assert_eq!(retrieved.id, created.id);
+    }
+
+    #[test]
+    fn session_manager_get_nonexistent_number() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let result = manager.get("999");
+        assert!(result.is_err());
+        assert!(matches!(result, Err(SessionError::NotFound(_))));
+    }
+
+    #[test]
+    fn session_manager_get_nonexistent_id() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let result = manager.get("999-nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(result, Err(SessionError::NotFound(_))));
+    }
+
+    #[test]
+    fn session_manager_get_derives_status() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("test").unwrap();
+        // Create summary.md to make status Completed
+        fs::write(session.summary_path(), "# Summary").unwrap();
+
+        let retrieved = manager.get("1").unwrap();
+        assert_eq!(retrieved.status, SessionStatus::Completed);
+    }
+
+    #[test]
+    fn session_manager_next_number_starts_at_one() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        assert_eq!(manager.next_number(), 1);
+    }
+
+    #[test]
+    fn session_manager_next_number_increments() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        manager.create("first").unwrap();
+        assert_eq!(manager.next_number(), 2);
+
+        manager.create("second").unwrap();
+        assert_eq!(manager.next_number(), 3);
+    }
+
+    #[test]
+    fn session_manager_derive_title_lowercase() {
+        assert_eq!(
+            SessionManager::derive_title("REST API"),
+            "rest-api"
+        );
+    }
+
+    #[test]
+    fn session_manager_derive_title_spaces_to_hyphens() {
+        assert_eq!(
+            SessionManager::derive_title("add user auth"),
+            "add-user-auth"
+        );
+    }
+
+    #[test]
+    fn session_manager_derive_title_underscores_to_hyphens() {
+        assert_eq!(
+            SessionManager::derive_title("fix_login_bug"),
+            "fix-login-bug"
+        );
+    }
+
+    #[test]
+    fn session_manager_derive_title_removes_special_chars() {
+        assert_eq!(
+            SessionManager::derive_title("add! @user# $auth%"),
+            "add-user-auth"
+        );
+    }
+
+    #[test]
+    fn session_manager_derive_title_preserves_hyphens() {
+        assert_eq!(
+            SessionManager::derive_title("auto-complete"),
+            "auto-complete"
+        );
     }
 }
