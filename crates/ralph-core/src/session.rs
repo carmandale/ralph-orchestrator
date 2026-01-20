@@ -5,7 +5,9 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 
 /// Session lifecycle status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,6 +115,80 @@ impl Session {
     /// Path to implementation/ directory (code-assist documentation).
     pub fn implementation_dir(&self) -> PathBuf {
         self.path.join("implementation")
+    }
+
+    // --- Status derivation ---
+
+    /// Derives the session status from directory contents.
+    ///
+    /// Status is determined by checking for the presence of files:
+    /// - If `summary.md` exists → parse to determine Completed vs Failed
+    /// - If `events.jsonl` exists (but no summary) → InProgress
+    /// - If `plan/` directory exists (but no events) → Planning
+    /// - Otherwise → Planning (just created)
+    pub fn derive_status(session_path: &Path) -> SessionStatus {
+        let summary_path = session_path.join("summary.md");
+        let events_path = session_path.join("events.jsonl");
+        let plan_path = session_path.join("plan");
+
+        if summary_path.exists() {
+            // Parse summary to determine completed vs failed
+            Self::parse_summary_status(&summary_path)
+        } else if events_path.exists() {
+            SessionStatus::InProgress
+        } else if plan_path.exists() {
+            SessionStatus::Planning
+        } else {
+            SessionStatus::Planning // Just created
+        }
+    }
+
+    /// Parses a summary.md file to determine if the session completed or failed.
+    ///
+    /// Looks for failure indicators in the summary content.
+    /// Returns `Failed` if the summary contains error indicators, otherwise `Completed`.
+    fn parse_summary_status(summary_path: &Path) -> SessionStatus {
+        if let Ok(content) = fs::read_to_string(summary_path) {
+            let content_lower = content.to_lowercase();
+            // Check for failure indicators in the summary
+            if content_lower.contains("status: failed")
+                || content_lower.contains("## failed")
+                || content_lower.contains("termination: failed")
+                || content_lower.contains("error:")
+                    && (content_lower.contains("safeguard")
+                        || content_lower.contains("max iterations"))
+            {
+                return SessionStatus::Failed;
+            }
+        }
+        SessionStatus::Completed
+    }
+
+    /// Reads the last event from events.jsonl to check for error indicators.
+    ///
+    /// This is an alternative method for detecting failed status when
+    /// no summary.md exists but the last event indicates failure.
+    #[allow(dead_code)]
+    fn check_events_for_failure(events_path: &Path) -> bool {
+        if let Ok(file) = fs::File::open(events_path) {
+            let reader = BufReader::new(file);
+            let mut last_line = String::new();
+
+            for line in reader.lines().map_while(Result::ok) {
+                if !line.trim().is_empty() {
+                    last_line = line;
+                }
+            }
+
+            if !last_line.is_empty() {
+                // Check if last event contains error indicators
+                let line_lower = last_line.to_lowercase();
+                return line_lower.contains("\"error\"")
+                    || line_lower.contains("safeguard")
+                    || line_lower.contains("max_iterations_reached");
+            }
+        }
+        false
     }
 }
 
@@ -339,5 +415,88 @@ mod tests {
             session.implementation_dir(),
             PathBuf::from("/project/.ralph-o/sessions/001-test/implementation")
         );
+    }
+
+    // --- derive_status tests ---
+
+    #[test]
+    fn derive_status_empty_dir_returns_planning() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let status = Session::derive_status(temp_dir.path());
+        assert_eq!(status, SessionStatus::Planning);
+    }
+
+    #[test]
+    fn derive_status_with_plan_dir_returns_planning() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        fs::create_dir(temp_dir.path().join("plan")).unwrap();
+        let status = Session::derive_status(temp_dir.path());
+        assert_eq!(status, SessionStatus::Planning);
+    }
+
+    #[test]
+    fn derive_status_with_events_returns_in_progress() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        fs::write(temp_dir.path().join("events.jsonl"), "{}").unwrap();
+        let status = Session::derive_status(temp_dir.path());
+        assert_eq!(status, SessionStatus::InProgress);
+    }
+
+    #[test]
+    fn derive_status_with_summary_returns_completed() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        fs::write(
+            temp_dir.path().join("summary.md"),
+            "# Session Summary\n\nStatus: completed",
+        )
+        .unwrap();
+        let status = Session::derive_status(temp_dir.path());
+        assert_eq!(status, SessionStatus::Completed);
+    }
+
+    #[test]
+    fn derive_status_with_failed_summary_returns_failed() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        fs::write(
+            temp_dir.path().join("summary.md"),
+            "# Session Summary\n\nStatus: failed\n\nError: safeguard triggered",
+        )
+        .unwrap();
+        let status = Session::derive_status(temp_dir.path());
+        assert_eq!(status, SessionStatus::Failed);
+    }
+
+    #[test]
+    fn derive_status_summary_takes_precedence_over_events() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        fs::write(temp_dir.path().join("events.jsonl"), "{}").unwrap();
+        fs::write(temp_dir.path().join("summary.md"), "# Summary").unwrap();
+        let status = Session::derive_status(temp_dir.path());
+        assert_eq!(status, SessionStatus::Completed);
+    }
+
+    #[test]
+    fn derive_status_events_takes_precedence_over_plan() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        fs::create_dir(temp_dir.path().join("plan")).unwrap();
+        fs::write(temp_dir.path().join("events.jsonl"), "{}").unwrap();
+        let status = Session::derive_status(temp_dir.path());
+        assert_eq!(status, SessionStatus::InProgress);
+    }
+
+    #[test]
+    fn check_events_for_failure_detects_error() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let events_path = temp_dir.path().join("events.jsonl");
+        fs::write(&events_path, "{\"type\": \"error\"}").unwrap();
+        assert!(Session::check_events_for_failure(&events_path));
+    }
+
+    #[test]
+    fn check_events_for_failure_returns_false_for_normal_events() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let events_path = temp_dir.path().join("events.jsonl");
+        fs::write(&events_path, "{\"type\": \"message\"}").unwrap();
+        assert!(!Session::check_events_for_failure(&events_path));
     }
 }
