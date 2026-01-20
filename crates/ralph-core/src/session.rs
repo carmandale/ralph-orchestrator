@@ -347,6 +347,68 @@ impl SessionManager {
             .filter(|c| c.is_alphanumeric() || *c == '-')
             .collect()
     }
+
+    /// Gets the current session by reading the `current` symlink.
+    ///
+    /// Returns `None` if:
+    /// - The symlink doesn't exist
+    /// - The symlink points to a non-existent directory
+    /// - The symlink is invalid
+    pub fn current(&self) -> Result<Option<Session>, SessionError> {
+        let current_link = self.sessions_dir.join("current");
+
+        // Check if the symlink exists
+        if !current_link.exists() {
+            return Ok(None);
+        }
+
+        // Read the symlink target
+        let target = fs::read_link(&current_link)?;
+
+        // Get the session ID from the target path
+        let session_id = target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| SessionError::InvalidId("Invalid symlink target".to_string()))?;
+
+        // Try to get the session
+        match self.get(session_id) {
+            Ok(session) => Ok(Some(session)),
+            Err(SessionError::NotFound(_)) => {
+                // Symlink points to deleted session
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Sets the current session by updating the `current` symlink.
+    ///
+    /// This removes any existing symlink and creates a new one pointing
+    /// to the specified session.
+    pub fn set_current(&self, session: &Session) -> Result<(), SessionError> {
+        let current_link = self.sessions_dir.join("current");
+
+        // Remove existing symlink if it exists
+        if current_link.exists() || current_link.symlink_metadata().is_ok() {
+            fs::remove_file(&current_link)?;
+        }
+
+        // Create new symlink (relative to sessions_dir)
+        let target = PathBuf::from(&session.id);
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&target, &current_link)?;
+        }
+
+        #[cfg(windows)]
+        {
+            std::os::windows::fs::symlink_dir(&target, &current_link)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -909,5 +971,108 @@ mod tests {
             SessionManager::derive_title("auto-complete"),
             "auto-complete"
         );
+    }
+
+    // --- current/set_current tests ---
+
+    #[test]
+    fn session_manager_current_returns_none_when_no_symlink() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let current = manager.current().unwrap();
+        assert!(current.is_none());
+    }
+
+    #[test]
+    fn session_manager_set_current_creates_symlink() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("test").unwrap();
+        manager.set_current(&session).unwrap();
+
+        let current_link = manager.sessions_dir.join("current");
+        assert!(current_link.exists());
+        assert!(current_link.symlink_metadata().unwrap().is_symlink());
+    }
+
+    #[test]
+    fn session_manager_current_retrieves_set_session() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("test").unwrap();
+        manager.set_current(&session).unwrap();
+
+        let current = manager.current().unwrap().unwrap();
+        assert_eq!(current.id, session.id);
+        assert_eq!(current.number, session.number);
+    }
+
+    #[test]
+    fn session_manager_set_current_updates_existing_symlink() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session1 = manager.create("first").unwrap();
+        let session2 = manager.create("second").unwrap();
+
+        // Set to first session
+        manager.set_current(&session1).unwrap();
+        let current = manager.current().unwrap().unwrap();
+        assert_eq!(current.id, session1.id);
+
+        // Update to second session
+        manager.set_current(&session2).unwrap();
+        let current = manager.current().unwrap().unwrap();
+        assert_eq!(current.id, session2.id);
+    }
+
+    #[test]
+    fn session_manager_current_returns_none_for_deleted_session() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("test").unwrap();
+        manager.set_current(&session).unwrap();
+
+        // Delete the session directory
+        fs::remove_dir_all(&session.path).unwrap();
+
+        // current() should return None for deleted session
+        let current = manager.current().unwrap();
+        assert!(current.is_none());
+    }
+
+    #[test]
+    fn session_manager_symlink_is_relative() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("test").unwrap();
+        manager.set_current(&session).unwrap();
+
+        let current_link = manager.sessions_dir.join("current");
+        let target = fs::read_link(&current_link).unwrap();
+
+        // Target should be relative (just the session ID)
+        assert_eq!(target, PathBuf::from("001-test"));
+        assert!(!target.is_absolute());
+    }
+
+    #[test]
+    fn session_manager_current_derives_status() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let session = manager.create("test").unwrap();
+        // Add events.jsonl to make status InProgress
+        fs::write(session.events_path(), "{}").unwrap();
+
+        manager.set_current(&session).unwrap();
+
+        let current = manager.current().unwrap().unwrap();
+        assert_eq!(current.status, SessionStatus::InProgress);
     }
 }
