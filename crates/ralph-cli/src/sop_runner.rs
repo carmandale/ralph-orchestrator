@@ -7,7 +7,7 @@
 //! 3. Spawn an interactive session with the backend
 
 use ralph_adapters::{CliBackend, CustomBackendError, NoBackendError, detect_backend_default};
-use ralph_core::RalphConfig;
+use ralph_core::{RalphConfig, Session};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use thiserror::Error;
@@ -62,6 +62,8 @@ pub struct SopRunConfig {
     pub backend_override: Option<String>,
     /// Path to config file (for backend resolution fallback).
     pub config_path: Option<PathBuf>,
+    /// Optional session for context injection.
+    pub session: Option<Session>,
 }
 
 /// Errors that can occur when running an SOP.
@@ -95,7 +97,7 @@ pub fn run_sop(config: SopRunConfig) -> Result<(), SopRunError> {
     )?;
 
     // 2. Build the prompt
-    let prompt = build_prompt(config.sop, config.user_input.as_deref());
+    let prompt = build_prompt(config.sop, config.user_input.as_deref(), config.session.as_ref());
 
     // 3. Get interactive backend configuration
     let cli_backend = CliBackend::for_interactive_prompt(&backend_name)?;
@@ -143,7 +145,7 @@ fn validate_backend_name(name: &str) -> Result<(), SopRunError> {
     }
 }
 
-/// Builds the combined SOP + user input prompt.
+/// Builds the combined SOP + session context + user input prompt.
 ///
 /// Format:
 /// ```text
@@ -151,19 +153,46 @@ fn validate_backend_name(name: &str) -> Result<(), SopRunError> {
 /// {SOP content}
 /// </sop>
 /// <user-content>
+/// __session__:
+///   dir: .ralph-o/sessions/NNN-xxx
+///   plan_dir: .ralph-o/sessions/NNN-xxx/plan
+///   tasks_dir: .ralph-o/sessions/NNN-xxx/tasks
+///   implementation_dir: .ralph-o/sessions/NNN-xxx/implementation
+/// ---
 /// {User's initial input if provided}
 /// </user-content>
 /// ```
-fn build_prompt(sop: Sop, user_input: Option<&str>) -> String {
+fn build_prompt(sop: Sop, user_input: Option<&str>, session: Option<&Session>) -> String {
     let sop_content = sop.content();
 
-    match user_input {
-        Some(input) if !input.is_empty() => format!(
-            "<sop>\n{}\n</sop>\n<user-content>\n{}\n</user-content>",
-            sop_content, input
-        ),
-        _ => format!("<sop>\n{}\n</sop>", sop_content),
-    }
+    // Build user-content section with session context
+    let user_content = match session {
+        Some(sess) => {
+            let session_yaml = format!(
+                "__session__:\n  dir: {}\n  plan_dir: {}\n  tasks_dir: {}\n  implementation_dir: {}",
+                sess.path.display(),
+                sess.plan_dir().display(),
+                sess.tasks_dir().display(),
+                sess.implementation_dir().display()
+            );
+
+            match user_input {
+                Some(input) if !input.is_empty() => {
+                    format!("{}\n---\n{}", session_yaml, input)
+                }
+                _ => session_yaml,
+            }
+        }
+        None => match user_input {
+            Some(input) if !input.is_empty() => input.to_string(),
+            _ => return format!("<sop>\n{}\n</sop>", sop_content),
+        },
+    };
+
+    format!(
+        "<sop>\n{}\n</sop>\n<user-content>\n{}\n</user-content>",
+        sop_content, user_content
+    )
 }
 
 /// Spawns an interactive backend session.
@@ -213,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_build_prompt_with_user_input() {
-        let prompt = build_prompt(Sop::Pdd, Some("Build a REST API"));
+        let prompt = build_prompt(Sop::Pdd, Some("Build a REST API"), None);
 
         // Should have SOP wrapped in tags
         assert!(prompt.starts_with("<sop>\n"));
@@ -225,7 +254,7 @@ mod tests {
 
     #[test]
     fn test_build_prompt_without_user_input() {
-        let prompt = build_prompt(Sop::CodeTaskGenerator, None);
+        let prompt = build_prompt(Sop::CodeTaskGenerator, None, None);
 
         // Should have SOP wrapped in tags
         assert!(prompt.starts_with("<sop>\n"));
@@ -237,10 +266,62 @@ mod tests {
 
     #[test]
     fn test_build_prompt_with_empty_user_input() {
-        let prompt = build_prompt(Sop::Pdd, Some(""));
+        let prompt = build_prompt(Sop::Pdd, Some(""), None);
 
         // Empty input should be treated like None
         assert!(!prompt.contains("<user-content>"));
+    }
+
+    #[test]
+    fn test_build_prompt_with_session_context() {
+        use std::path::PathBuf;
+        use ralph_core::Session;
+
+        // Create a test session
+        let session = Session::new("001-test-api", PathBuf::from(".ralph-o/sessions/001-test-api"));
+
+        let prompt = build_prompt(Sop::Pdd, Some("Build a REST API"), Some(&session));
+
+        // Should have SOP wrapped in tags
+        assert!(prompt.starts_with("<sop>\n"));
+        assert!(prompt.contains("</sop>"));
+
+        // Should have session context in user-content
+        assert!(prompt.contains("<user-content>"));
+        assert!(prompt.contains("__session__:"));
+        assert!(prompt.contains("dir: .ralph-o/sessions/001-test-api"));
+        assert!(prompt.contains("plan_dir: .ralph-o/sessions/001-test-api/plan"));
+        assert!(prompt.contains("tasks_dir: .ralph-o/sessions/001-test-api/tasks"));
+        assert!(prompt.contains("implementation_dir: .ralph-o/sessions/001-test-api/implementation"));
+        assert!(prompt.contains("---\nBuild a REST API"));
+    }
+
+    #[test]
+    fn test_build_prompt_with_session_no_user_input() {
+        use std::path::PathBuf;
+        use ralph_core::Session;
+
+        // Create a test session
+        let session = Session::new("002-feature", PathBuf::from(".ralph-o/sessions/002-feature"));
+
+        let prompt = build_prompt(Sop::Pdd, None, Some(&session));
+
+        // Should have SOP wrapped in tags
+        assert!(prompt.starts_with("<sop>\n"));
+        assert!(prompt.contains("</sop>"));
+
+        // Should have session context but no user input separator in user-content
+        assert!(prompt.contains("<user-content>"));
+        assert!(prompt.contains("__session__:"));
+        assert!(prompt.contains("dir: .ralph-o/sessions/002-feature"));
+
+        // Extract user-content section and verify no separator
+        let user_content_start = prompt.find("<user-content>").unwrap();
+        let user_content_end = prompt.find("</user-content>").unwrap();
+        let user_content = &prompt[user_content_start..user_content_end];
+
+        // No separator line between session YAML and user input (since there's no user input)
+        assert!(!user_content.contains("\n---\n"));
     }
 
     #[test]

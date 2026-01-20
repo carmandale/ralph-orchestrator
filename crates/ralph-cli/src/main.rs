@@ -420,6 +420,10 @@ struct PlanArgs {
     /// Backend to use (overrides config and auto-detection)
     #[arg(short, long, value_name = "BACKEND")]
     backend: Option<String>,
+
+    /// Session title override (defaults to derived from IDEA)
+    #[arg(long, value_name = "NAME")]
+    name: Option<String>,
 }
 
 /// Arguments for the task subcommand.
@@ -1124,16 +1128,45 @@ fn plan_command(config_path: PathBuf, color_mode: ColorMode, args: PlanArgs) -> 
 
     let use_colors = color_mode.should_use_colors();
 
+    // Determine project root from config path (parent of .ralph-o/)
+    let project_root = config_path
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| anyhow::anyhow!("Could not determine project root from config path"))?;
+
+    // Initialize SessionManager
+    let session_manager = SessionManager::new(project_root);
+
+    // Determine session title from --name or idea
+    let title = if let Some(name) = args.name {
+        name
+    } else if let Some(idea) = &args.idea {
+        idea.clone()
+    } else {
+        "planning-session".to_string()
+    };
+
+    // Create new session
+    let session = session_manager
+        .create(&title)
+        .context("Failed to create planning session")?;
+
+    // Set as current session
+    session_manager
+        .set_current(&session)
+        .context("Failed to set current session")?;
+
     // Show what we're starting
     if use_colors {
         println!(
-            "{}🎯{} Starting {} session...",
+            "{}🎯{} Starting {} session: {}",
             colors::CYAN,
             colors::RESET,
-            Sop::Pdd.name()
+            Sop::Pdd.name(),
+            session.id
         );
     } else {
-        println!("Starting {} session...", Sop::Pdd.name());
+        println!("Starting {} session: {}", Sop::Pdd.name(), session.id);
     }
 
     let config = SopRunConfig {
@@ -1141,6 +1174,7 @@ fn plan_command(config_path: PathBuf, color_mode: ColorMode, args: PlanArgs) -> 
         user_input: args.idea,
         backend_override: args.backend,
         config_path: Some(config_path),
+        session: Some(session),
     };
 
     sop_runner::run_sop(config).map_err(|e| match e {
@@ -1179,6 +1213,7 @@ fn task_command(config_path: PathBuf, color_mode: ColorMode, args: TaskArgs) -> 
         user_input: args.input,
         backend_override: args.backend,
         config_path: Some(config_path),
+        session: None, // TODO: Step 8 will implement session support for task command
     };
 
     sop_runner::run_sop(config).map_err(|e| match e {
