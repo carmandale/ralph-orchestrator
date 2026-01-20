@@ -77,6 +77,43 @@ impl Session {
         let num_str = &id[..hyphen_pos];
         num_str.parse().ok()
     }
+
+    // --- Path helpers ---
+
+    /// Path to PROMPT.md.
+    pub fn prompt_path(&self) -> PathBuf {
+        self.path.join("PROMPT.md")
+    }
+
+    /// Path to scratchpad.md.
+    pub fn scratchpad_path(&self) -> PathBuf {
+        self.path.join("scratchpad.md")
+    }
+
+    /// Path to events.jsonl.
+    pub fn events_path(&self) -> PathBuf {
+        self.path.join("events.jsonl")
+    }
+
+    /// Path to summary.md.
+    pub fn summary_path(&self) -> PathBuf {
+        self.path.join("summary.md")
+    }
+
+    /// Path to plan/ directory (PDD artifacts).
+    pub fn plan_dir(&self) -> PathBuf {
+        self.path.join("plan")
+    }
+
+    /// Path to tasks/ directory (code task files).
+    pub fn tasks_dir(&self) -> PathBuf {
+        self.path.join("tasks")
+    }
+
+    /// Path to implementation/ directory (code-assist documentation).
+    pub fn implementation_dir(&self) -> PathBuf {
+        self.path.join("implementation")
+    }
 }
 
 #[cfg(test)]
@@ -216,5 +253,91 @@ mod tests {
     fn session_title_with_multiple_hyphens() {
         let session = Session::new("001-my-long-feature-name", PathBuf::from("/tmp"));
         assert_eq!(session.title, "my-long-feature-name");
+    }
+
+    // --- Path helper tests ---
+
+    #[test]
+    fn prompt_path_returns_correct_path() {
+        let session = Session::new(
+            "001-test",
+            PathBuf::from("/project/.ralph-o/sessions/001-test"),
+        );
+        assert_eq!(
+            session.prompt_path(),
+            PathBuf::from("/project/.ralph-o/sessions/001-test/PROMPT.md")
+        );
+    }
+
+    #[test]
+    fn scratchpad_path_returns_correct_path() {
+        let session = Session::new(
+            "001-test",
+            PathBuf::from("/project/.ralph-o/sessions/001-test"),
+        );
+        assert_eq!(
+            session.scratchpad_path(),
+            PathBuf::from("/project/.ralph-o/sessions/001-test/scratchpad.md")
+        );
+    }
+
+    #[test]
+    fn events_path_returns_correct_path() {
+        let session = Session::new(
+            "001-test",
+            PathBuf::from("/project/.ralph-o/sessions/001-test"),
+        );
+        assert_eq!(
+            session.events_path(),
+            PathBuf::from("/project/.ralph-o/sessions/001-test/events.jsonl")
+        );
+    }
+
+    #[test]
+    fn summary_path_returns_correct_path() {
+        let session = Session::new(
+            "001-test",
+            PathBuf::from("/project/.ralph-o/sessions/001-test"),
+        );
+        assert_eq!(
+            session.summary_path(),
+            PathBuf::from("/project/.ralph-o/sessions/001-test/summary.md")
+        );
+    }
+
+    #[test]
+    fn plan_dir_returns_correct_path() {
+        let session = Session::new(
+            "001-test",
+            PathBuf::from("/project/.ralph-o/sessions/001-test"),
+        );
+        assert_eq!(
+            session.plan_dir(),
+            PathBuf::from("/project/.ralph-o/sessions/001-test/plan")
+        );
+    }
+
+    #[test]
+    fn tasks_dir_returns_correct_path() {
+        let session = Session::new(
+            "001-test",
+            PathBuf::from("/project/.ralph-o/sessions/001-test"),
+        );
+        assert_eq!(
+            session.tasks_dir(),
+            PathBuf::from("/project/.ralph-o/sessions/001-test/tasks")
+        );
+    }
+
+    #[test]
+    fn implementation_dir_returns_correct_path() {
+        let session = Session::new(
+            "001-test",
+            PathBuf::from("/project/.ralph-o/sessions/001-test"),
+        );
+        assert_eq!(
+            session.implementation_dir(),
+            PathBuf::from("/project/.ralph-o/sessions/001-test/implementation")
+        );
     }
 }
