@@ -389,6 +389,10 @@ struct CleanArgs {
     /// Preview what would be deleted without actually deleting
     #[arg(long)]
     dry_run: bool,
+
+    /// Session ID or number to clean (defaults to current session)
+    #[arg(long)]
+    session: Option<String>,
 }
 
 /// Arguments for the emit subcommand.
@@ -1022,38 +1026,46 @@ fn events_command(color_mode: ColorMode, args: EventsArgs) -> Result<()> {
 fn clean_command(config_path: PathBuf, color_mode: ColorMode, args: CleanArgs) -> Result<()> {
     let use_colors = color_mode.should_use_colors();
 
-    // Load configuration
-    let config = if config_path.exists() {
-        RalphConfig::from_file(&config_path)
-            .with_context(|| format!("Failed to load config from {:?}", config_path))?
+    // Determine project root from config path
+    // Config is at .ralph-o/config.yml, so project root is parent of .ralph-o
+    let project_root = config_path
+        .parent() // .ralph-o
+        .and_then(|p| p.parent()) // project root
+        .ok_or_else(|| anyhow::anyhow!("Could not determine project root from config path"))?;
+
+    let manager = SessionManager::new(project_root);
+
+    // Determine what to clean based on --session flag
+    let session_dir = if let Some(session_id) = &args.session {
+        // Clean specific session
+        let session = manager.get(session_id).with_context(|| {
+            format!("Session '{}' not found", session_id)
+        })?;
+        session.path.clone()
     } else {
-        warn!("Config file {:?} not found, using defaults", config_path);
-        RalphConfig::default()
+        // Clean current session
+        let session = manager.current()
+            .context("Failed to get current session")?
+            .ok_or_else(|| anyhow::anyhow!(
+                "No current session. Use --session to specify a session, or run 'ralph plan' or 'ralph run' to create one."
+            ))?;
+        session.path.clone()
     };
 
-    // Extract the .agent directory path from scratchpad path
-    let scratchpad_path = Path::new(&config.core.scratchpad);
-    let agent_dir = scratchpad_path.parent().ok_or_else(|| {
-        anyhow::anyhow!(
-            "Could not determine parent directory from scratchpad path: {}",
-            config.core.scratchpad
-        )
-    })?;
-
     // Check if directory exists
-    if !agent_dir.exists() {
+    if !session_dir.exists() {
         // Not an error - just inform user
         if use_colors {
             println!(
                 "{}Nothing to clean:{} Directory '{}' does not exist",
                 colors::DIM,
                 colors::RESET,
-                agent_dir.display()
+                session_dir.display()
             );
         } else {
             println!(
                 "Nothing to clean: Directory '{}' does not exist",
-                agent_dir.display()
+                session_dir.display()
             );
         }
         return Ok(());
@@ -1063,41 +1075,41 @@ fn clean_command(config_path: PathBuf, color_mode: ColorMode, args: CleanArgs) -
     if args.dry_run {
         if use_colors {
             println!(
-                "{}Dry run mode:{} Would delete directory and all contents:",
+                "{}Dry run mode:{} Would delete session directory and all contents:",
                 colors::CYAN,
                 colors::RESET
             );
         } else {
-            println!("Dry run mode: Would delete directory and all contents:");
+            println!("Dry run mode: Would delete session directory and all contents:");
         }
-        println!("  {}", agent_dir.display());
+        println!("  {}", session_dir.display());
 
         // List directory contents
-        list_directory_contents(agent_dir, use_colors, 1)?;
+        list_directory_contents(&session_dir, use_colors, 1)?;
 
         return Ok(());
     }
 
     // Perform actual deletion
-    fs::remove_dir_all(agent_dir).with_context(|| {
+    fs::remove_dir_all(&session_dir).with_context(|| {
         format!(
-            "Failed to delete directory '{}'. Check permissions and try again.",
-            agent_dir.display()
+            "Failed to delete session directory '{}'. Check permissions and try again.",
+            session_dir.display()
         )
     })?;
 
     // Success message
     if use_colors {
         println!(
-            "{}✓{} Cleaned: Deleted '{}' and all contents",
+            "{}✓{} Cleaned: Deleted session '{}' and all contents",
             colors::GREEN,
             colors::RESET,
-            agent_dir.display()
+            session_dir.display()
         );
     } else {
         println!(
-            "Cleaned: Deleted '{}' and all contents",
-            agent_dir.display()
+            "Cleaned: Deleted session '{}' and all contents",
+            session_dir.display()
         );
     }
 
