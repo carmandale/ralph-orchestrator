@@ -227,6 +227,9 @@ enum Commands {
 
     /// Generate code task files from descriptions or plans
     Task(TaskArgs),
+
+    /// List all sessions with their status
+    List(ListArgs),
 }
 
 /// Arguments for the init subcommand.
@@ -446,6 +449,10 @@ struct TaskArgs {
     step: Option<u32>,
 }
 
+/// Arguments for the list subcommand.
+#[derive(Parser, Debug)]
+struct ListArgs {}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Install panic hook to restore terminal state on crash
@@ -493,6 +500,7 @@ async fn main() -> Result<()> {
         Some(Commands::Emit(args)) => emit_command(cli.color, args),
         Some(Commands::Plan(args)) => plan_command(cli.config, cli.color, args),
         Some(Commands::Task(args)) => task_command(cli.config, cli.color, args),
+        Some(Commands::List(args)) => list_command(cli.config, cli.color, args),
         None => {
             // Default to run with no overrides (backwards compatibility)
             let args = RunArgs {
@@ -1271,6 +1279,92 @@ fn task_command(config_path: PathBuf, color_mode: ColorMode, args: TaskArgs) -> 
         ),
         SopRunError::SpawnError(io_err) => anyhow::anyhow!("Failed to spawn backend: {}", io_err),
     })
+}
+
+/// Lists all sessions with their status.
+fn list_command(_config_path: PathBuf, color_mode: ColorMode, _args: ListArgs) -> Result<()> {
+    let use_colors = color_mode.should_use_colors();
+
+    // Determine project root (current directory)
+    let project_root = std::env::current_dir().context("Failed to get current directory")?;
+
+    // Initialize SessionManager
+    let session_manager = SessionManager::new(&project_root);
+
+    // Get all sessions
+    let sessions = session_manager
+        .list()
+        .context("Failed to list sessions")?;
+
+    // Get current session ID
+    let current_id = session_manager
+        .current()
+        .context("Failed to get current session")?
+        .map(|s| s.id);
+
+    if sessions.is_empty() {
+        if use_colors {
+            println!(
+                "{}No sessions found.{} Run 'ralph plan' to create one.",
+                colors::DIM,
+                colors::RESET
+            );
+        } else {
+            println!("No sessions found. Run 'ralph plan' to create one.");
+        }
+        return Ok(());
+    }
+
+    // Print header
+    if use_colors {
+        println!(
+            "{}{:>4}  {:<30}  {:<12}  {:<20}{}",
+            colors::DIM,
+            "NUM",
+            "TITLE",
+            "STATUS",
+            "CREATED",
+            colors::RESET
+        );
+        println!("{}{}{}", colors::DIM, "─".repeat(72), colors::RESET);
+    } else {
+        println!("{:>4}  {:<30}  {:<12}  {:<20}", "NUM", "TITLE", "STATUS", "CREATED");
+        println!("{}", "─".repeat(72));
+    }
+
+    // Print each session
+    for session in sessions {
+        let is_current = current_id.as_ref() == Some(&session.id);
+        let status_str = format!("{:?}", session.status);
+        let created_str = session.created_at.format("%Y-%m-%d %H:%M").to_string();
+
+        if use_colors {
+            if is_current {
+                println!(
+                    "{}▸{} {:>3}  {:<30}  {:<12}  {:<20}",
+                    colors::GREEN,
+                    colors::RESET,
+                    session.number,
+                    session.title,
+                    status_str,
+                    created_str
+                );
+            } else {
+                println!(
+                    "  {:>3}  {:<30}  {:<12}  {:<20}",
+                    session.number, session.title, status_str, created_str
+                );
+            }
+        } else {
+            let marker = if is_current { "▸" } else { " " };
+            println!(
+                "{} {:>3}  {:<30}  {:<12}  {:<20}",
+                marker, session.number, session.title, status_str, created_str
+            );
+        }
+    }
+
+    Ok(())
 }
 
 /// Lists directory contents recursively for dry-run mode.
