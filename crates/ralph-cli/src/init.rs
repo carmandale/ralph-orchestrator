@@ -76,8 +76,17 @@ event_loop:
 
 /// Checks if .ralph-o/config.yml exists and handles the force flag.
 /// Also creates the .ralph-o/ and .ralph-o/sessions/ directories if they don't exist.
+/// Warns if a legacy .agent/ directory is detected.
 fn check_file_exists(force: bool) -> Result<(), InitError> {
     let config_path = Path::new(".ralph-o/config.yml");
+
+    // Warn about legacy .agent/ directory
+    let agent_dir = Path::new(".agent");
+    if agent_dir.exists() && agent_dir.is_dir() {
+        eprintln!("\n⚠️  Legacy .agent/ directory detected!");
+        eprintln!("   Run `ralph run` to automatically migrate to the new session-based structure.");
+        eprintln!("   Your .agent/ contents will be moved to .ralph-o/sessions/000-migrated/\n");
+    }
 
     // Create .ralph-o/ directory if it doesn't exist
     let ralph_dir = Path::new(".ralph-o");

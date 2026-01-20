@@ -409,6 +409,63 @@ impl SessionManager {
 
         Ok(())
     }
+
+    /// Detects if a legacy `.agent/` directory exists in the project root.
+    ///
+    /// Returns `true` if `.agent/` exists and is a directory.
+    pub fn detect_legacy_agent_dir(&self) -> bool {
+        let agent_dir = self.project_root.join(".agent");
+        agent_dir.exists() && agent_dir.is_dir()
+    }
+
+    /// Migrates a legacy `.agent/` directory to a new session.
+    ///
+    /// This creates a session with ID `000-migrated` and moves the contents
+    /// of `.agent/` into it. The `.agent/` directory is then removed.
+    ///
+    /// Returns the newly created migration session.
+    pub fn migrate_legacy_session(&self) -> Result<Session, SessionError> {
+        let agent_dir = self.project_root.join(".agent");
+
+        // Verify .agent/ exists
+        if !self.detect_legacy_agent_dir() {
+            return Err(SessionError::NotFound(".agent directory not found".to_string()));
+        }
+
+        // Create 000-migrated session directory
+        let session_id = "000-migrated";
+        let session_path = self.sessions_dir.join(session_id);
+
+        // Create session directory if it doesn't exist
+        fs::create_dir_all(&session_path).map_err(|e| {
+            SessionError::CreateFailed(format!("{}: {}", session_path.display(), e))
+        })?;
+
+        // Move contents from .agent/ to session directory
+        for entry in fs::read_dir(&agent_dir)? {
+            let entry = entry?;
+            let src = entry.path();
+            let filename = src.file_name().ok_or_else(|| {
+                SessionError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Invalid filename",
+                ))
+            })?;
+            let dest = session_path.join(filename);
+
+            // Move the file/directory
+            fs::rename(&src, &dest)?;
+        }
+
+        // Remove the now-empty .agent/ directory
+        fs::remove_dir(&agent_dir)?;
+
+        // Create session object
+        let mut session = Session::new(session_id, session_path.clone());
+        session.status = Session::derive_status(&session_path);
+
+        Ok(session)
+    }
 }
 
 #[cfg(test)]
@@ -1074,5 +1131,139 @@ mod tests {
 
         let current = manager.current().unwrap().unwrap();
         assert_eq!(current.status, SessionStatus::InProgress);
+    }
+
+    // --- Migration tests ---
+
+    #[test]
+    fn detect_legacy_agent_dir_returns_false_when_missing() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        assert!(!manager.detect_legacy_agent_dir());
+    }
+
+    #[test]
+    fn detect_legacy_agent_dir_returns_true_when_present() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let agent_dir = temp_dir.path().join(".agent");
+        fs::create_dir(&agent_dir).unwrap();
+
+        let manager = SessionManager::new(temp_dir.path());
+        assert!(manager.detect_legacy_agent_dir());
+    }
+
+    #[test]
+    fn detect_legacy_agent_dir_returns_false_for_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let agent_file = temp_dir.path().join(".agent");
+        fs::write(&agent_file, "not a directory").unwrap();
+
+        let manager = SessionManager::new(temp_dir.path());
+        assert!(!manager.detect_legacy_agent_dir());
+    }
+
+    #[test]
+    fn migrate_legacy_session_creates_000_migrated() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        // Create .agent/ with some files
+        let agent_dir = temp_dir.path().join(".agent");
+        fs::create_dir(&agent_dir).unwrap();
+        fs::write(agent_dir.join("scratchpad.md"), "# Scratchpad").unwrap();
+        fs::write(agent_dir.join("events.jsonl"), "{}").unwrap();
+
+        let session = manager.migrate_legacy_session().unwrap();
+
+        assert_eq!(session.id, "000-migrated");
+        assert_eq!(session.number, 0);
+        assert_eq!(session.title, "migrated");
+        assert!(session.path.exists());
+    }
+
+    #[test]
+    fn migrate_legacy_session_moves_all_contents() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        // Create .agent/ with various files
+        let agent_dir = temp_dir.path().join(".agent");
+        fs::create_dir(&agent_dir).unwrap();
+        fs::write(agent_dir.join("scratchpad.md"), "# Scratchpad").unwrap();
+        fs::write(agent_dir.join("events.jsonl"), "{}").unwrap();
+        fs::write(agent_dir.join("summary.md"), "# Summary").unwrap();
+
+        let session = manager.migrate_legacy_session().unwrap();
+
+        // Verify all files were moved
+        assert!(session.scratchpad_path().exists());
+        assert!(session.events_path().exists());
+        assert!(session.summary_path().exists());
+
+        // Verify content was preserved
+        let content = fs::read_to_string(session.scratchpad_path()).unwrap();
+        assert_eq!(content, "# Scratchpad");
+    }
+
+    #[test]
+    fn migrate_legacy_session_removes_agent_dir() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        // Create .agent/
+        let agent_dir = temp_dir.path().join(".agent");
+        fs::create_dir(&agent_dir).unwrap();
+        fs::write(agent_dir.join("scratchpad.md"), "content").unwrap();
+
+        manager.migrate_legacy_session().unwrap();
+
+        // Verify .agent/ was removed
+        assert!(!agent_dir.exists());
+    }
+
+    #[test]
+    fn migrate_legacy_session_derives_status() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        // Create .agent/ with summary.md
+        let agent_dir = temp_dir.path().join(".agent");
+        fs::create_dir(&agent_dir).unwrap();
+        fs::write(agent_dir.join("summary.md"), "Status: completed").unwrap();
+
+        let session = manager.migrate_legacy_session().unwrap();
+
+        assert_eq!(session.status, SessionStatus::Completed);
+    }
+
+    #[test]
+    fn migrate_legacy_session_fails_when_no_agent_dir() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        let result = manager.migrate_legacy_session();
+        assert!(result.is_err());
+        assert!(matches!(result, Err(SessionError::NotFound(_))));
+    }
+
+    #[test]
+    fn migrate_legacy_session_handles_subdirectories() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SessionManager::new(temp_dir.path());
+
+        // Create .agent/ with a subdirectory
+        let agent_dir = temp_dir.path().join(".agent");
+        fs::create_dir(&agent_dir).unwrap();
+        let sub_dir = agent_dir.join("plan");
+        fs::create_dir(&sub_dir).unwrap();
+        fs::write(sub_dir.join("design.md"), "# Design").unwrap();
+
+        let session = manager.migrate_legacy_session().unwrap();
+
+        // Verify subdirectory was moved
+        let migrated_plan = session.plan_dir();
+        assert!(migrated_plan.exists());
+        assert!(migrated_plan.join("design.md").exists());
     }
 }

@@ -558,6 +558,28 @@ async fn run_command(
     // Initialize SessionManager
     let session_manager = SessionManager::new(project_root);
 
+    // Check for legacy .agent/ directory and offer migration
+    if session_manager.detect_legacy_agent_dir() {
+        eprintln!("\n⚠️  Legacy .agent/ directory detected!");
+        eprintln!("   Migrating to new session-based structure...");
+
+        match session_manager.migrate_legacy_session() {
+            Ok(migrated_session) => {
+                eprintln!("   ✓ Migration complete! Contents moved to: {}", migrated_session.id);
+                eprintln!("   ✓ Old .agent/ directory removed\n");
+
+                // Set the migrated session as current
+                session_manager
+                    .set_current(&migrated_session)
+                    .context("Failed to set migrated session as current")?;
+            }
+            Err(e) => {
+                eprintln!("   ✗ Migration failed: {}", e);
+                eprintln!("   You may need to manually migrate your .agent/ directory\n");
+            }
+        }
+    }
+
     // Determine which session to use based on CLI flags
     let session: Session = if let Some(prompt_text) = &args.prompt_text {
         // Create new session from prompt text
