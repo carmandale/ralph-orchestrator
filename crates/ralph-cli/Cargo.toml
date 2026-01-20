@@ -15,7 +15,7 @@ dist = true
 workspace = true
 
 [[bin]]
-name = "ralph"
+name = "ralph-o"
 path = "src/main.rs"
 
 [dependencies]

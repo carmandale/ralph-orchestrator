@@ -158,7 +158,13 @@ impl HatlessRalph {
 Study `{specs_dir}` to understand requirements.
 Don't assume features aren't implemented—search first.
 
-### 0b. SCRATCHPAD
+### 0b. PROJECT INSTRUCTIONS
+**Follow project-specific instructions from CLAUDE.md and AGENTS.md.**
+These files contain critical tool configurations, build commands, and workflows
+specific to this project. When they specify tool usage (like `gj` for builds),
+USE THOSE TOOLS instead of generic commands.
+
+### 0c. SCRATCHPAD
 Study `{scratchpad}`. It's shared state. It's memory.
 
 Task markers:
@@ -427,10 +433,10 @@ Until all tasks `[x]` or `[~]`.
 
 Events are **routing signals**, not data transport. Keep payloads brief.
 
-**Use `ralph emit` to write events** (handles JSON escaping correctly):
+**Use `ralph-o emit` to write events** (handles JSON escaping correctly):
 ```bash
-ralph emit "build.done" "tests: pass, lint: pass"
-ralph emit "review.done" --json '{{"status": "approved", "issues": 0}}'
+ralph-o emit "build.done" "tests: pass, lint: pass"
+ralph-o emit "review.done" --json '{{"status": "approved", "issues": 0}}'
 ```
 
 ⚠️ **NEVER use echo/cat to write events** — shell escaping breaks JSON.
@@ -479,8 +485,12 @@ mod tests {
         assert!(prompt.contains("Study"));
         assert!(prompt.contains("Don't assume features aren't implemented"));
 
+        // Project instructions section
+        assert!(prompt.contains("### 0b. PROJECT INSTRUCTIONS"));
+        assert!(prompt.contains("CLAUDE.md and AGENTS.md"));
+
         // Scratchpad section with task markers
-        assert!(prompt.contains("### 0b. SCRATCHPAD"));
+        assert!(prompt.contains("### 0c. SCRATCHPAD"));
         assert!(prompt.contains("Task markers:"));
         assert!(prompt.contains("- `[ ]` pending"));
         assert!(prompt.contains("- `[x]` done"));
@@ -502,7 +512,7 @@ mod tests {
 
         // Event writing and completion
         assert!(prompt.contains("## EVENT WRITING"));
-        assert!(prompt.contains("ralph emit"));
+        assert!(prompt.contains("ralph-o emit"));
         assert!(prompt.contains("NEVER use echo/cat"));
         assert!(prompt.contains("LOOP_COMPLETE"));
     }
@@ -533,7 +543,8 @@ hats:
 
         // Orientation phases
         assert!(prompt.contains("### 0a. ORIENTATION"));
-        assert!(prompt.contains("### 0b. SCRATCHPAD"));
+        assert!(prompt.contains("### 0b. PROJECT INSTRUCTIONS"));
+        assert!(prompt.contains("### 0c. SCRATCHPAD"));
 
         // Multi-hat workflow: PLAN + DELEGATE, not IMPLEMENT
         assert!(prompt.contains("## WORKFLOW"));

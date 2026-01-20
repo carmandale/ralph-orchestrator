@@ -33,7 +33,7 @@ fn test_clean_basic_success() -> Result<()> {
     assert!(session_dir.join("scratchpad.md").exists());
 
     // Run ralph clean (should clean current session)
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("clean")
         .current_dir(temp_path)
         .output()?;
@@ -77,7 +77,7 @@ fn test_clean_with_session_flag() -> Result<()> {
     assert!(session2.exists());
 
     // Run ralph clean --session 002 (should clean session2, not current)
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("clean")
         .arg("--session")
         .arg("002")
@@ -114,7 +114,7 @@ fn test_clean_dry_run() -> Result<()> {
     symlink(&session_dir, &current_link)?;
 
     // Run ralph clean with --dry-run
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("clean")
         .arg("--dry-run")
         .current_dir(temp_path)
@@ -150,7 +150,7 @@ fn test_clean_no_current_session() -> Result<()> {
     fs::create_dir_all(&sessions_dir)?;
 
     // Run ralph clean (should fail - no current session)
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("clean")
         .current_dir(temp_path)
         .output()?;
@@ -191,7 +191,7 @@ fn test_clean_color_output_never() -> Result<()> {
     symlink(&session_dir, &current_link)?;
 
     // Run ralph clean with --color never
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("clean")
         .arg("--color")
         .arg("never")
@@ -230,7 +230,7 @@ fn test_clean_color_output_always() -> Result<()> {
     symlink(&session_dir, &current_link)?;
 
     // Run ralph clean with --color always
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("clean")
         .arg("--color")
         .arg("always")
@@ -277,7 +277,7 @@ fn test_clean_permission_error() -> Result<()> {
     fs::set_permissions(&session_dir, perms)?;
 
     // Run ralph clean
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("clean")
         .current_dir(temp_path)
         .output()?;

@@ -41,7 +41,7 @@ core:
     assert!(!scratchpad_path.exists());
 
     // Run ralph resume - should fail with error about missing scratchpad
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("resume")
         .arg("--config")
         .arg(temp_path.join("ralph.yml"))
@@ -108,7 +108,7 @@ Previous work completed on feature B.
     fs::write(session_dir.join("PROMPT.md"), "Test task")?;
 
     // Run ralph resume
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("resume")
         .current_dir(temp_path)
         .output()?;
@@ -164,7 +164,7 @@ This is a resumed session.
     fs::write(agent_dir.join("scratchpad.md"), scratchpad_content)?;
 
     // Run ralph resume
-    let _output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let _output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("resume")
         .arg("--config")
         .arg(temp_path.join("ralph.yml"))
@@ -226,7 +226,7 @@ core:
         fs::remove_file(&events_file)?;
     }
 
-    let _output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let _output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("run")
         .arg("--config")
         .arg(temp_path.join("ralph.yml"))
@@ -246,7 +246,7 @@ core:
     }
 
     // Test 2: Run ralph resume (should publish task.resume)
-    let _output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let _output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("resume")
         .arg("--config")
         .arg(temp_path.join("ralph.yml"))
@@ -326,7 +326,7 @@ This scratchpad contains UNIQUE_CONTENT_MARKER for testing.
     fs::write(session_dir.join("PROMPT.md"), "Test task")?;
 
     // Run ralph resume
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("resume")
         .current_dir(temp_path)
         .output()?;

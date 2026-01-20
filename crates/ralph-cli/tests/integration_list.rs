@@ -17,7 +17,7 @@ fn test_list_no_sessions() -> Result<()> {
     fs::create_dir_all(temp_path.join(".ralph-o/sessions"))?;
 
     // Run ralph list
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("list")
         .current_dir(temp_path)
         .output()?;
@@ -53,7 +53,7 @@ fn test_list_with_sessions() -> Result<()> {
     fs::write(session2.join("PROMPT.md"), "Bug fix")?;
 
     // Run ralph list
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("list")
         .current_dir(temp_path)
         .output()?;
@@ -100,7 +100,7 @@ fn test_list_highlights_current() -> Result<()> {
     }
 
     // Run ralph list
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("list")
         .current_dir(temp_path)
         .output()?;

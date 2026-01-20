@@ -8,7 +8,7 @@
 //! - Entry point to the headless orchestration loop
 //! - Event history viewing via `ralph events`
 //! - Project initialization via `ralph init`
-//! - SOP-based planning via `ralph plan` and `ralph task`
+//! - SOP-based planning via `ralph-o plan` and `ralph task`
 
 mod init;
 mod presets;
@@ -181,7 +181,7 @@ mod colors {
 
 /// Ralph Orchestrator - Multi-agent orchestration framework
 #[derive(Parser, Debug)]
-#[command(name = "ralph", version, about)]
+#[command(name = "ralph-o", version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -318,7 +318,7 @@ struct RunArgs {
 /// Arguments for the resume subcommand.
 ///
 /// Per spec: "When loop terminates due to safeguard (not completion promise),
-/// user can run `ralph resume` to restart reading existing scratchpad."
+/// user can run `ralph-o resume` to restart reading existing scratchpad."
 #[derive(Parser, Debug)]
 struct ResumeArgs {
     /// Session ID or number to resume (e.g., "001", "001-feature-name")
@@ -750,7 +750,7 @@ async fn run_command(
 /// Resume a previously interrupted loop from existing scratchpad.
 ///
 /// Per spec: "When loop terminates due to safeguard (not completion promise),
-/// user can run `ralph resume` to restart reading existing scratchpad,
+/// user can run `ralph-o resume` to restart reading existing scratchpad,
 /// continuing from where it left off."
 async fn resume_command(
     config_path: PathBuf,
@@ -791,7 +791,7 @@ async fn resume_command(
             .context("Failed to get current session")?
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "No current session. Run 'ralph plan' first or use --session to specify one."
+                    "No current session. Run 'ralph-o plan' first or use --session to specify one."
                 )
             })?
     };
@@ -912,14 +912,14 @@ fn init_command(color_mode: ColorMode, args: InitArgs) -> Result<()> {
                 if use_colors {
                     println!("{}✓{} {}", colors::GREEN, colors::RESET, msg);
                     println!(
-                        "\n{}Next steps:{}\n  1. Create PROMPT.md with your task\n  2. Run: ralph run",
+                        "\n{}Next steps:{}\n  1. Create PROMPT.md with your task\n  2. Run: ralph-o run",
                         colors::DIM,
                         colors::RESET
                     );
                 } else {
                     println!("{}", msg);
                     println!(
-                        "\nNext steps:\n  1. Create PROMPT.md with your task\n  2. Run: ralph run"
+                        "\nNext steps:\n  1. Create PROMPT.md with your task\n  2. Run: ralph-o run"
                     );
                 }
                 return Ok(());
@@ -942,14 +942,14 @@ fn init_command(color_mode: ColorMode, args: InitArgs) -> Result<()> {
                         backend
                     );
                     println!(
-                        "\n{}Next steps:{}\n  1. Create PROMPT.md with your task\n  2. Run: ralph run",
+                        "\n{}Next steps:{}\n  1. Create PROMPT.md with your task\n  2. Run: ralph-o run",
                         colors::DIM,
                         colors::RESET
                     );
                 } else {
                     println!("Created ralph.yml with {} backend", backend);
                     println!(
-                        "\nNext steps:\n  1. Create PROMPT.md with your task\n  2. Run: ralph run"
+                        "\nNext steps:\n  1. Create PROMPT.md with your task\n  2. Run: ralph-o run"
                     );
                 }
                 return Ok(());
@@ -963,11 +963,11 @@ fn init_command(color_mode: ColorMode, args: InitArgs) -> Result<()> {
     // No flag specified - show help
     println!("Initialize a new ralph.yml configuration file.\n");
     println!("Usage:");
-    println!("  ralph init --backend <backend>   Generate minimal config for backend");
-    println!("  ralph init --preset <preset>     Use an embedded preset");
-    println!("  ralph init --list-presets        Show available presets\n");
+    println!("  ralph-o init --backend <backend>   Generate minimal config for backend");
+    println!("  ralph-o init --preset <preset>     Use an embedded preset");
+    println!("  ralph-o init --list-presets        Show available presets\n");
     println!("Backends: claude, kiro, gemini, codex, amp, custom");
-    println!("\nRun 'ralph init --list-presets' to see available presets.");
+    println!("\nRun 'ralph-o init --list-presets' to see available presets.");
 
     Ok(())
 }
@@ -1069,7 +1069,7 @@ fn clean_command(config_path: PathBuf, color_mode: ColorMode, args: CleanArgs) -
         let session = manager.current()
             .context("Failed to get current session")?
             .ok_or_else(|| anyhow::anyhow!(
-                "No current session. Use --session to specify a session, or run 'ralph plan' or 'ralph run' to create one."
+                "No current session. Use --session to specify a session, or run 'ralph-o plan' or 'ralph-o run' to create one."
             ))?;
         session.path.clone()
     };
@@ -1296,7 +1296,7 @@ fn task_command(config_path: PathBuf, color_mode: ColorMode, args: TaskArgs) -> 
         .current()
         .context("Failed to get current session")?
         .ok_or_else(|| {
-            anyhow::anyhow!("No current session. Run 'ralph plan' first to create a session.")
+            anyhow::anyhow!("No current session. Run 'ralph-o plan' first to create a session.")
         })?;
 
     // Determine input: use provided input, or default to plan/implementation/plan.md
@@ -1381,12 +1381,12 @@ fn list_command(_config_path: PathBuf, color_mode: ColorMode, _args: ListArgs) -
     if sessions.is_empty() {
         if use_colors {
             println!(
-                "{}No sessions found.{} Run 'ralph plan' to create one.",
+                "{}No sessions found.{} Run 'ralph-o plan' to create one.",
                 colors::DIM,
                 colors::RESET
             );
         } else {
-            println!("No sessions found. Run 'ralph plan' to create one.");
+            println!("No sessions found. Run 'ralph-o plan' to create one.");
         }
         return Ok(());
     }

@@ -120,7 +120,11 @@ event_loop:
         "Prompt should include orientation phase"
     );
     assert!(
-        prompt.contains("### 0b. SCRATCHPAD"),
+        prompt.contains("### 0b. PROJECT INSTRUCTIONS"),
+        "Prompt should include project instructions section"
+    );
+    assert!(
+        prompt.contains("### 0c. SCRATCHPAD"),
         "Prompt should include scratchpad section"
     );
     assert!(

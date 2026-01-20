@@ -15,7 +15,7 @@ fn test_init_creates_ralph_o_directory() -> Result<()> {
     let temp_path = temp_dir.path();
 
     // Run ralph init --backend claude
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("init")
         .arg("--backend")
         .arg("claude")
@@ -53,7 +53,7 @@ fn test_init_from_preset_creates_directory() -> Result<()> {
     let temp_path = temp_dir.path();
 
     // Run ralph init --preset tdd-red-green
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("init")
         .arg("--preset")
         .arg("tdd-red-green")
@@ -83,7 +83,7 @@ fn test_init_refuses_overwrite_without_force() -> Result<()> {
     let temp_path = temp_dir.path();
 
     // Run init first time
-    let output1 = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output1 = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("init")
         .arg("--backend")
         .arg("claude")
@@ -92,7 +92,7 @@ fn test_init_refuses_overwrite_without_force() -> Result<()> {
     assert!(output1.status.success());
 
     // Try to run init again without force - should fail
-    let output2 = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output2 = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("init")
         .arg("--backend")
         .arg("kiro")
@@ -121,7 +121,7 @@ fn test_init_with_force_overwrites() -> Result<()> {
     let temp_path = temp_dir.path();
 
     // Run init first time with claude
-    let output1 = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output1 = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("init")
         .arg("--backend")
         .arg("claude")
@@ -133,7 +133,7 @@ fn test_init_with_force_overwrites() -> Result<()> {
     assert!(content1.contains("backend: \"claude\""));
 
     // Run init again with --force and different backend
-    let output2 = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output2 = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("init")
         .arg("--backend")
         .arg("kiro")
@@ -159,7 +159,7 @@ fn test_init_creates_sessions_dir_if_missing() -> Result<()> {
     fs::create_dir(temp_path.join(".ralph-o"))?;
 
     // Run init
-    let output = Command::new(env!("CARGO_BIN_EXE_ralph"))
+    let output = Command::new(env!("CARGO_BIN_EXE_ralph-o"))
         .arg("init")
         .arg("--backend")
         .arg("claude")
