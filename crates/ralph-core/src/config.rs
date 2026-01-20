@@ -6,7 +6,7 @@
 use ralph_proto::Topic;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 
 /// Top-level configuration for Ralph Orchestrator.
@@ -448,6 +448,68 @@ impl RalphConfig {
             _ => &self.adapters.claude, // Default fallback
         }
     }
+
+    // --- Session-aware path helpers ---
+
+    /// Returns the effective scratchpad path.
+    /// If a session is configured, returns the session scratchpad path.
+    /// Otherwise, returns the configured scratchpad path.
+    pub fn scratchpad_path(&self, project_root: &Path) -> PathBuf {
+        if let Some(ref session_id) = self.core.session_id {
+            project_root
+                .join(".ralph-o")
+                .join("sessions")
+                .join(session_id)
+                .join("scratchpad.md")
+        } else {
+            PathBuf::from(&self.core.scratchpad)
+        }
+    }
+
+    /// Returns the effective events path.
+    /// If a session is configured, returns the session events path.
+    /// Otherwise, returns the default `.agent/events.jsonl`.
+    pub fn events_path(&self, project_root: &Path) -> PathBuf {
+        if let Some(ref session_id) = self.core.session_id {
+            project_root
+                .join(".ralph-o")
+                .join("sessions")
+                .join(session_id)
+                .join("events.jsonl")
+        } else {
+            PathBuf::from(".agent/events.jsonl")
+        }
+    }
+
+    /// Returns the effective summary path.
+    /// If a session is configured, returns the session summary path.
+    /// Otherwise, returns the default `.agent/summary.md`.
+    pub fn summary_path(&self, project_root: &Path) -> PathBuf {
+        if let Some(ref session_id) = self.core.session_id {
+            project_root
+                .join(".ralph-o")
+                .join("sessions")
+                .join(session_id)
+                .join("summary.md")
+        } else {
+            PathBuf::from(".agent/summary.md")
+        }
+    }
+
+    /// Returns the effective prompt path.
+    /// If a session is configured, returns the session PROMPT.md path.
+    /// Otherwise, returns the configured prompt_file.
+    pub fn prompt_path(&self, project_root: &Path) -> PathBuf {
+        if let Some(ref session_id) = self.core.session_id {
+            project_root
+                .join(".ralph-o")
+                .join("sessions")
+                .join(session_id)
+                .join("PROMPT.md")
+        } else {
+            PathBuf::from(&self.event_loop.prompt_file)
+        }
+    }
 }
 
 /// Configuration warnings emitted during validation.
@@ -561,7 +623,14 @@ impl Default for EventLoopConfig {
 /// Per spec: "Core behaviors (always injected, can customize paths)"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoreConfig {
+    /// Optional session ID for session-based paths.
+    /// When set, paths will be resolved relative to `.ralph-o/sessions/<session_id>/`.
+    /// When None, uses legacy `.agent/` paths.
+    #[serde(default)]
+    pub session_id: Option<String>,
+
     /// Path to the scratchpad file (shared state between hats).
+    /// If `session_id` is set, this is ignored in favor of session path.
     #[serde(default = "default_scratchpad")]
     pub scratchpad: String,
 
@@ -595,6 +664,7 @@ fn default_guardrails() -> Vec<String> {
 impl Default for CoreConfig {
     fn default() -> Self {
         Self {
+            session_id: None,
             scratchpad: default_scratchpad(),
             specs_dir: default_specs_dir(),
             guardrails: default_guardrails(),
@@ -1554,5 +1624,83 @@ hats:
             reviewer.default_publishes,
             Some("review.complete".to_string())
         );
+    }
+
+    #[test]
+    fn test_session_aware_paths_with_session() {
+        let yaml = r#"
+core:
+  session_id: "001-rest-api"
+"#;
+        let config: RalphConfig = serde_yaml::from_str(yaml).unwrap();
+        let project_root = Path::new("/project");
+
+        assert_eq!(
+            config.scratchpad_path(project_root),
+            PathBuf::from("/project/.ralph-o/sessions/001-rest-api/scratchpad.md")
+        );
+        assert_eq!(
+            config.events_path(project_root),
+            PathBuf::from("/project/.ralph-o/sessions/001-rest-api/events.jsonl")
+        );
+        assert_eq!(
+            config.summary_path(project_root),
+            PathBuf::from("/project/.ralph-o/sessions/001-rest-api/summary.md")
+        );
+        assert_eq!(
+            config.prompt_path(project_root),
+            PathBuf::from("/project/.ralph-o/sessions/001-rest-api/PROMPT.md")
+        );
+    }
+
+    #[test]
+    fn test_session_aware_paths_without_session() {
+        // Default config with no session
+        let config = RalphConfig::default();
+        let project_root = Path::new("/project");
+
+        // Should return legacy paths
+        assert_eq!(
+            config.scratchpad_path(project_root),
+            PathBuf::from(".agent/scratchpad.md")
+        );
+        assert_eq!(
+            config.events_path(project_root),
+            PathBuf::from(".agent/events.jsonl")
+        );
+        assert_eq!(
+            config.summary_path(project_root),
+            PathBuf::from(".agent/summary.md")
+        );
+        assert_eq!(
+            config.prompt_path(project_root),
+            PathBuf::from("PROMPT.md") // default from default_prompt_file
+        );
+    }
+
+    #[test]
+    fn test_session_aware_paths_with_custom_scratchpad() {
+        // Config with custom scratchpad but no session - should use custom path
+        let yaml = r#"
+core:
+  scratchpad: ".workspace/plan.md"
+"#;
+        let config: RalphConfig = serde_yaml::from_str(yaml).unwrap();
+        let project_root = Path::new("/project");
+
+        assert_eq!(
+            config.scratchpad_path(project_root),
+            PathBuf::from(".workspace/plan.md")
+        );
+    }
+
+    #[test]
+    fn test_session_id_in_core_config() {
+        let yaml = r#"
+core:
+  session_id: "002-auth-feature"
+"#;
+        let config: RalphConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.core.session_id, Some("002-auth-feature".to_string()));
     }
 }

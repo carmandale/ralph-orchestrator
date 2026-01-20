@@ -246,6 +246,7 @@ mod tests {
     #[test]
     fn test_custom_guardrails_injected() {
         let custom_core = CoreConfig {
+            session_id: None,
             scratchpad: ".workspace/plan.md".to_string(),
             specs_dir: "./specifications/".to_string(),
             guardrails: vec!["Custom rule one".to_string(), "Custom rule two".to_string()],
