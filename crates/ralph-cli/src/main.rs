@@ -574,12 +574,27 @@ async fn run_command(
         match session_manager.migrate_legacy_session() {
             Ok(migrated_session) => {
                 eprintln!("   ✓ Migration complete! Contents moved to: {}", migrated_session.id);
-                eprintln!("   ✓ Old .agent/ directory removed\n");
+                eprintln!("   ✓ Old .agent/ directory removed");
 
-                // Set the migrated session as current
-                session_manager
-                    .set_current(&migrated_session)
-                    .context("Failed to set migrated session as current")?;
+                // Only set as current if no current session exists
+                if let Ok(current) = session_manager.current() {
+                    if let Some(current_session) = current {
+                        eprintln!("   ℹ️  Keeping current session: {}", current_session.id);
+                        eprintln!("       (Migrated content available in {})\n", migrated_session.id);
+                    } else {
+                        // No current session - set migrated session as current
+                        session_manager
+                            .set_current(&migrated_session)
+                            .context("Failed to set migrated session as current")?;
+                        eprintln!("   ✓ Set {} as current session\n", migrated_session.id);
+                    }
+                } else {
+                    // Error reading current - set migrated session as current
+                    session_manager
+                        .set_current(&migrated_session)
+                        .context("Failed to set migrated session as current")?;
+                    eprintln!("   ✓ Set {} as current session\n", migrated_session.id);
+                }
             }
             Err(e) => {
                 eprintln!("   ✗ Migration failed: {}", e);
