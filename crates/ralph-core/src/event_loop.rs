@@ -188,7 +188,7 @@ impl EventLoop {
             config.event_loop.starting_event.clone(),
         );
 
-        let event_reader = EventReader::new(".agent/events.jsonl");
+        let event_reader = EventReader::new(&config.core.events_file);
 
         Self {
             config,
@@ -999,17 +999,21 @@ event_loop:
     #[test]
     fn test_completion_promise_detection() {
         use std::fs;
-        use std::path::Path;
+        use tempfile::tempdir;
 
-        let config = RalphConfig::default();
+        let mut config = RalphConfig::default();
+
+        // Use tempdir instead of hardcoded .agent/ path
+        let temp_dir = tempdir().unwrap();
+        let scratchpad_path = temp_dir.path().join("scratchpad.md");
+        config.core.scratchpad = scratchpad_path.to_string_lossy().to_string();
+
         let mut event_loop = EventLoop::new(config);
         event_loop.initialize("Test");
 
         // Create scratchpad with all tasks completed
-        let scratchpad_path = Path::new(".agent/scratchpad.md");
-        fs::create_dir_all(scratchpad_path.parent().unwrap()).unwrap();
         fs::write(
-            scratchpad_path,
+            &scratchpad_path,
             "## Tasks\n- [x] Task 1 done\n- [x] Task 2 done\n",
         )
         .unwrap();
@@ -1535,7 +1539,7 @@ hats:
     #[test]
     fn test_partial_completion_with_cancelled_tasks() {
         use std::fs;
-        use std::path::Path;
+        use tempfile::tempdir;
 
         // Test that cancelled tasks don't block completion when all other tasks are done
         let yaml = r#"
@@ -1545,7 +1549,13 @@ hats:
     triggers: ["build.task"]
     publishes: ["build.done"]
 "#;
-        let config: RalphConfig = serde_yaml::from_str(yaml).unwrap();
+        let mut config: RalphConfig = serde_yaml::from_str(yaml).unwrap();
+
+        // Use tempdir instead of hardcoded .agent/ path
+        let temp_dir = tempdir().unwrap();
+        let scratchpad_path = temp_dir.path().join("scratchpad.md");
+        config.core.scratchpad = scratchpad_path.to_string_lossy().to_string();
+
         let mut event_loop = EventLoop::new(config);
         event_loop.initialize("Test task");
 
@@ -1553,15 +1563,13 @@ hats:
         let ralph_id = HatId::new("ralph");
 
         // Create scratchpad with completed and cancelled tasks
-        let scratchpad_path = Path::new(".agent/scratchpad.md");
-        fs::create_dir_all(scratchpad_path.parent().unwrap()).unwrap();
         let scratchpad_content = r"## Tasks
 - [x] Core feature implemented
 - [x] Tests added
 - [~] Documentation update (cancelled: out of scope)
 - [~] Performance optimization (cancelled: not needed)
 ";
-        fs::write(scratchpad_path, scratchpad_content).unwrap();
+        fs::write(&scratchpad_path, scratchpad_content).unwrap();
 
         // Simulate completion with some cancelled tasks
         let output = "All done! LOOP_COMPLETE";
@@ -1577,9 +1585,6 @@ hats:
             Some(TerminationReason::CompletionPromise),
             "Should complete with partial completion"
         );
-
-        // Cleanup
-        fs::remove_file(scratchpad_path).ok();
     }
 
     #[test]
