@@ -89,6 +89,38 @@ impl Session {
         self.path.join("PROMPT.md")
     }
 
+    /// Path to rough-idea.md in the plan directory.
+    pub fn rough_idea_path(&self) -> PathBuf {
+        self.plan_dir().join("rough-idea.md")
+    }
+
+    /// Gets a human-readable description of the session from rough-idea.md.
+    ///
+    /// Returns the first markdown heading (# Title) or first non-empty line,
+    /// truncated to 60 chars. Returns None if rough-idea.md doesn't exist.
+    pub fn description(&self) -> Option<String> {
+        let path = self.rough_idea_path();
+        let content = fs::read_to_string(&path).ok()?;
+        
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            // Strip markdown heading prefix
+            let desc = line.trim_start_matches('#').trim();
+            if desc.is_empty() {
+                continue;
+            }
+            // Truncate if too long
+            if desc.len() > 60 {
+                return Some(format!("{}...", &desc[..57]));
+            }
+            return Some(desc.to_string());
+        }
+        None
+    }
+
     /// Path to scratchpad.md.
     pub fn scratchpad_path(&self) -> PathBuf {
         self.path.join("scratchpad.md")

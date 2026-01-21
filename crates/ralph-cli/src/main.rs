@@ -1253,8 +1253,10 @@ fn plan_command(config_path: PathBuf, color_mode: ColorMode, args: PlanArgs) -> 
             Sop::Pdd.name(),
             session.id
         );
+        println!("   {}Session dir:{} {}", colors::DIM, colors::RESET, session.path.display());
     } else {
         println!("Starting {} session: {}", Sop::Pdd.name(), session.id);
+        println!("   Session dir: {}", session.path.display());
     }
 
     let config = SopRunConfig {
@@ -1312,7 +1314,15 @@ fn task_command(config_path: PathBuf, color_mode: ColorMode, args: TaskArgs) -> 
         }
     };
 
-    // Show what we're starting
+    // Show what we're starting with context
+    let step_suffix = if let Some(step) = args.step {
+        format!(" (step {})", step)
+    } else {
+        String::new()
+    };
+    let description = session.description().unwrap_or_default();
+    let plan_path = session.plan_dir().join("implementation").join("plan.md");
+    
     if use_colors {
         println!(
             "{}📋{} Starting {} session: {}{}",
@@ -1320,23 +1330,23 @@ fn task_command(config_path: PathBuf, color_mode: ColorMode, args: TaskArgs) -> 
             colors::RESET,
             Sop::CodeTaskGenerator.name(),
             session.id,
-            if let Some(step) = args.step {
-                format!(" (step {})", step)
-            } else {
-                String::new()
-            }
+            step_suffix
         );
+        if !description.is_empty() {
+            println!("   {}Feature:{} {}", colors::DIM, colors::RESET, description);
+        }
+        println!("   {}Plan:{} {}", colors::DIM, colors::RESET, plan_path.display());
     } else {
         println!(
             "Starting {} session: {}{}",
             Sop::CodeTaskGenerator.name(),
             session.id,
-            if let Some(step) = args.step {
-                format!(" (step {})", step)
-            } else {
-                String::new()
-            }
+            step_suffix
         );
+        if !description.is_empty() {
+            println!("   Feature: {}", description);
+        }
+        println!("   Plan: {}", plan_path.display());
     }
 
     let config = SopRunConfig {
