@@ -2118,7 +2118,7 @@ async fn run_loop_impl(
 
         // Print termination info to console (skip in TUI mode - TUI handles display)
         if !enable_tui {
-            print_termination(reason, state, use_colors);
+            print_termination(reason, state, use_colors, None);
         }
     };
 
@@ -2658,7 +2658,7 @@ fn log_terminate_event(logger: &mut EventLogger, iteration: u32, event: &Event) 
     }
 }
 
-fn print_termination(reason: &TerminationReason, state: &ralph_core::LoopState, use_colors: bool) {
+fn print_termination(reason: &TerminationReason, state: &ralph_core::LoopState, use_colors: bool, session_dir: Option<&Path>) {
     use colors::*;
 
     // Determine status color and message based on termination reason
@@ -2673,6 +2673,12 @@ fn print_termination(reason: &TerminationReason, state: &ralph_core::LoopState, 
         TerminationReason::Stopped => (CYAN, "■", "Manually stopped"),
         TerminationReason::Interrupted => (YELLOW, "⚡", "Interrupted by signal"),
     };
+
+    // Extract task stats from scratchpad if session_dir is provided
+    let task_stats = session_dir.and_then(|dir| {
+        let scratchpad = dir.join("scratchpad.md");
+        extract_task_stats(&scratchpad)
+    });
 
     let separator = "─".repeat(58);
 
@@ -2696,6 +2702,12 @@ fn print_termination(reason: &TerminationReason, state: &ralph_core::LoopState, 
                 state.cumulative_cost
             );
         }
+        if let Some((completed, pending, cancelled)) = task_stats {
+            println!(
+                "{BOLD}│{RESET}   Tasks:       {CYAN}{} completed, {} pending, {} cancelled{RESET}",
+                completed, pending, cancelled
+            );
+        }
         println!("{BOLD}└{separator}┘{RESET}");
     } else {
         println!("\n+{}+", "-".repeat(58));
@@ -2705,6 +2717,12 @@ fn print_termination(reason: &TerminationReason, state: &ralph_core::LoopState, 
         println!("|   Elapsed:     {:.1}s", state.elapsed().as_secs_f64());
         if state.cumulative_cost > 0.0 {
             println!("|   Cost:        ${:.2}", state.cumulative_cost);
+        }
+        if let Some((completed, pending, cancelled)) = task_stats {
+            println!(
+                "|   Tasks:       {} completed, {} pending, {} cancelled",
+                completed, pending, cancelled
+            );
         }
         println!("+{}+", "-".repeat(58));
     }
