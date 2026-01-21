@@ -653,6 +653,33 @@ async fn run_command(
         config.verbose = true;
     }
 
+    // Display session context for user awareness
+    let use_colors = color_mode.should_use_colors();
+    let prompt_path = session.prompt_path();
+    let tasks_dir = session.tasks_dir();
+    let description = session.description().unwrap_or_default();
+
+    if use_colors {
+        println!(
+            "{}🚀{} Starting execution: {}",
+            colors::CYAN,
+            colors::RESET,
+            session.id
+        );
+        if !description.is_empty() {
+            println!("   {}Feature:{} {}", colors::DIM, colors::RESET, description);
+        }
+        println!("   {}PROMPT:{} {}", colors::DIM, colors::RESET, prompt_path.display());
+        println!("   {}Tasks:{} {}", colors::DIM, colors::RESET, tasks_dir.display());
+    } else {
+        println!("Starting execution: {}", session.id);
+        if !description.is_empty() {
+            println!("   Feature: {}", description);
+        }
+        println!("   PROMPT: {}", prompt_path.display());
+        println!("   Tasks: {}", tasks_dir.display());
+    }
+
     // Apply execution mode overrides per spec
     if args.autonomous {
         config.cli.default_mode = "autonomous".to_string();
