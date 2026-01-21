@@ -2116,9 +2116,14 @@ async fn run_loop_impl(
             warn!("Failed to write summary file: {}", e);
         }
 
+        // Extract session directory for termination output
+        // scratchpad path is .ralph-o/sessions/001-name/scratchpad.md
+        // session_dir is .ralph-o/sessions/001-name
+        let session_dir = scratchpad_path.parent();
+
         // Print termination info to console (skip in TUI mode - TUI handles display)
         if !enable_tui {
-            print_termination(reason, state, use_colors, None);
+            print_termination(reason, state, use_colors, session_dir);
         }
     };
 
@@ -2708,6 +2713,41 @@ fn print_termination(reason: &TerminationReason, state: &ralph_core::LoopState, 
                 completed, pending, cancelled
             );
         }
+
+        // Show file paths if session_dir is provided
+        if let Some(dir) = session_dir {
+            let summary_path = dir.join("summary.md");
+            let scratchpad_path = dir.join("scratchpad.md");
+
+            // Only show section if at least one file exists
+            if summary_path.exists() || scratchpad_path.exists() {
+                println!("{BOLD}├{separator}┤{RESET}");
+
+                // Show relative paths from cwd
+                let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+                if summary_path.exists() {
+                    let display_path = summary_path.strip_prefix(&cwd)
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|_| summary_path.clone());
+                    println!(
+                        "{BOLD}│{RESET}   Summary:     {CYAN}{}{RESET}",
+                        display_path.display()
+                    );
+                }
+
+                if scratchpad_path.exists() {
+                    let display_path = scratchpad_path.strip_prefix(&cwd)
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|_| scratchpad_path.clone());
+                    println!(
+                        "{BOLD}│{RESET}   Scratchpad:  {CYAN}{}{RESET}",
+                        display_path.display()
+                    );
+                }
+            }
+        }
+
         println!("{BOLD}└{separator}┘{RESET}");
     } else {
         println!("\n+{}+", "-".repeat(58));
@@ -2724,6 +2764,35 @@ fn print_termination(reason: &TerminationReason, state: &ralph_core::LoopState, 
                 completed, pending, cancelled
             );
         }
+
+        // Show file paths if session_dir is provided
+        if let Some(dir) = session_dir {
+            let summary_path = dir.join("summary.md");
+            let scratchpad_path = dir.join("scratchpad.md");
+
+            // Only show section if at least one file exists
+            if summary_path.exists() || scratchpad_path.exists() {
+                println!("+{}+", "-".repeat(58));
+
+                // Show relative paths from cwd
+                let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+                if summary_path.exists() {
+                    let display_path = summary_path.strip_prefix(&cwd)
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|_| summary_path.clone());
+                    println!("|   Summary:     {}", display_path.display());
+                }
+
+                if scratchpad_path.exists() {
+                    let display_path = scratchpad_path.strip_prefix(&cwd)
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|_| scratchpad_path.clone());
+                    println!("|   Scratchpad:  {}", display_path.display());
+                }
+            }
+        }
+
         println!("+{}+", "-".repeat(58));
     }
 }
@@ -2993,5 +3062,102 @@ hats:
         );
         assert!(!hat_map.contains_key("task.*"));
         assert!(!hat_map.contains_key("build.*"));
+    }
+
+    #[test]
+    fn test_extract_task_stats_empty_file() {
+        use tempfile::NamedTempFile;
+        use std::io::Write;
+
+        // Given: An empty file
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"").unwrap();
+        file.flush().unwrap();
+
+        // When: Extracting task stats
+        let result = extract_task_stats(file.path());
+
+        // Then: Should return None
+        assert_eq!(result, None, "Empty file should return None");
+    }
+
+    #[test]
+    fn test_extract_task_stats_no_tasks() {
+        use tempfile::NamedTempFile;
+        use std::io::Write;
+
+        // Given: A file with no task markers
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"# Planning Session\n\nSome notes here.\n\n## Notes\n\nMore notes.").unwrap();
+        file.flush().unwrap();
+
+        // When: Extracting task stats
+        let result = extract_task_stats(file.path());
+
+        // Then: Should return None
+        assert_eq!(result, None, "File with no tasks should return None");
+    }
+
+    #[test]
+    fn test_extract_task_stats_mixed_tasks() {
+        use tempfile::NamedTempFile;
+        use std::io::Write;
+
+        // Given: A file with mixed task states
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"# Tasks\n\n- [x] Completed task 1\n- [ ] Pending task\n- [x] Completed task 2\n- [~] Cancelled task\n- [x] Completed task 3").unwrap();
+        file.flush().unwrap();
+
+        // When: Extracting task stats
+        let result = extract_task_stats(file.path());
+
+        // Then: Should return correct counts
+        assert_eq!(result, Some((3, 1, 1)), "Should count 3 completed, 1 pending, 1 cancelled");
+    }
+
+    #[test]
+    fn test_extract_task_stats_nested_checkboxes() {
+        use tempfile::NamedTempFile;
+        use std::io::Write;
+
+        // Given: A file with nested (indented) checkboxes
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"# Tasks\n\n- [x] Parent task\n  - [x] Nested completed\n  - [ ] Nested pending\n- [ ] Another task").unwrap();
+        file.flush().unwrap();
+
+        // When: Extracting task stats
+        let result = extract_task_stats(file.path());
+
+        // Then: Should count all checkboxes including nested
+        assert_eq!(result, Some((2, 2, 0)), "Should count nested checkboxes");
+    }
+
+    #[test]
+    fn test_extract_task_stats_non_checkbox_lines() {
+        use tempfile::NamedTempFile;
+        use std::io::Write;
+
+        // Given: A file with mixed content including non-checkbox lines
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"# Tasks\n\n- Regular list item\n- [x] Completed\n- [ ] Pending\n\nSome notes here.\n\n- Another regular item").unwrap();
+        file.flush().unwrap();
+
+        // When: Extracting task stats
+        let result = extract_task_stats(file.path());
+
+        // Then: Should only count checkbox items
+        assert_eq!(result, Some((1, 1, 0)), "Should ignore non-checkbox lines");
+    }
+
+    #[test]
+    fn test_extract_task_stats_file_not_found() {
+        // Given: A path to a non-existent file
+        let path = Path::new("/tmp/nonexistent-scratchpad.md");
+
+        // When: Extracting task stats
+        let result = extract_task_stats(path);
+
+        // Then: Should return None
+        assert_eq!(result, None, "Non-existent file should return None");
     }
 }
