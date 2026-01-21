@@ -65,3 +65,4 @@ PROMPT.md
 # But allow benchmark task prompts
 !bench/tasks/**/PROMPT.md
 .tmp-ralph-claude-code
+.ralph-o/

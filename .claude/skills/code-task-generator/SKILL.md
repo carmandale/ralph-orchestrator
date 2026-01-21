@@ -13,10 +13,16 @@ This sop generates structured code task files from rough descriptions, ideas, or
 
 ## Parameters
 
-- **input** (required): Task description, file path, or PDD plan path. Can be a simple sentence, paragraph, detailed explanation, or path to a PDD implementation plan.
+- **input** (optional): Task description, file path, or PDD plan path. Can be a simple sentence, paragraph, detailed explanation, or path to a PDD implementation plan. If not provided, defaults to the session's plan.md.
 - **step_number** (optional): For PDD plans only - specific step to process. If not provided, automatically determines the next uncompleted step from the checklist.
-- **output_dir** (optional, default: "tasks/"): Directory where the code task file will be created
 - **task_name** (optional): For descriptions only - specific task name. If not provided, will be generated from the description.
+
+**Session Context:**
+- The session's directories are automatically provided via `__session__`:
+  - `__session__.plan_dir` - where PDD artifacts are stored
+  - `__session__.tasks_dir` - where code task files will be created
+- Default PDD plan location: `__session__.plan_dir`/implementation/plan.md
+- All generated tasks will be stored in `__session__.tasks_dir`
 
 **Constraints for parameter acquisition:**
 - You MUST ask for all required parameters upfront in a single prompt rather than one at a time
@@ -34,6 +40,7 @@ This sop generates structured code task files from rough descriptions, ideas, or
 Automatically determine whether input is a description or PDD plan.
 
 **Constraints:**
+- If no input is provided, You MUST check for PDD plan at `__session__.plan_dir`/implementation/plan.md
 - You MUST check if input is a file path that exists
 - If file exists, You MUST read it and check for PDD plan structure (checklist, numbered steps)
 - If file contains PDD checklist format, You MUST set mode to "pdd"
@@ -83,13 +90,14 @@ Present task breakdown for user approval before generation.
 Create appropriate file structure based on mode and approved plan.
 
 **Constraints:**
-- For PDD mode: You MUST create a folder named `step{NN}` where NN is zero-padded (e.g., step01, step02, step10)
+- You MUST create all task files in `__session__.tasks_dir`
+- For PDD mode: You MUST create a folder named `step{NN}` where NN is zero-padded (e.g., step01, step02, step10) inside `__session__.tasks_dir`
 - For PDD mode: You MUST create multiple code task files within the step folder, named sequentially: `task-01-{title}.code-task.md`, `task-02-{title}.code-task.md`, etc.
 - For PDD mode: You MUST break down the step into logical implementation phases focusing on functional components, NOT separate testing tasks
-- For PDD mode: You MUST include "Reference Documentation" section with path to design/detailed-design.md as required reading
+- For PDD mode: You MUST include "Reference Documentation" section with path to `__session__.plan_dir`/design/detailed-design.md as required reading
 - For PDD mode: You MUST include specific research documents in "Additional References" only if they are directly relevant to the task (e.g., specific technology research for that component)
 - For PDD mode: You MUST add a note instructing agents to read the detailed design before implementation
-- For description mode: You MUST create single task or multiple tasks as planned
+- For description mode: You MUST create single task or multiple tasks as planned in `__session__.tasks_dir`
 - You MUST add YAML frontmatter with `status: pending`, `created: <current date in YYYY-MM-DD format>`, `started: null`, `completed: null`
 - You MUST generate task names using kebab-case format
 - You MUST create files with `.code-task.md` extension
@@ -98,7 +106,6 @@ Create appropriate file structure based on mode and approved plan.
 - You MUST include unit test requirements as part of the acceptance criteria for each implementation task
 - You MUST NOT create separate tasks for "add unit tests" or "write tests" because testing should be integrated into each functional implementation task
 - You MUST provide realistic complexity assessment and required skills
-- You MUST save files to the specified output directory
 
 ### 6. Report Results
 
@@ -118,7 +125,7 @@ After generating code tasks, offer to create a PROMPT.md file for Ralph.
 
 **Constraints:**
 - You MUST ask the user: "Would you like me to create a PROMPT.md for Ralph to implement these tasks?"
-- If the user agrees, You MUST create a minimal PROMPT.md file containing:
+- If the user agrees, You MUST create a minimal PROMPT.md file in the session directory (`__session__.dir`) containing:
   - A clear objective statement (what to implement)
   - Reference to the generated code task files
   - Suggested execution order
@@ -204,10 +211,10 @@ The application currently accepts any string as an email address, leading to dat
 
 ## Reference Documentation
 **Required:**
-- Design: planning/design/detailed-design.md
+- Design: __session__.plan_dir/design/detailed-design.md
 
 **Additional References (if relevant to this task):**
-- planning/research/validation-libraries.md (for email validation approach)
+- __session__.plan_dir/research/validation-libraries.md (for email validation approach)
 
 **Note:** You MUST read the detailed design document before beginning implementation. Read additional references as needed for context.
 
@@ -267,14 +274,13 @@ The application currently accepts any string as an email address, leading to dat
 ### Example Input (Description Mode)
 ```
 input: "I need a function that validates email addresses and returns detailed error messages"
-output_dir: "tasks/"
 ```
 
 ### Example Output (Description Mode)
 ```
 Detected mode: description
 
-Generated code task: tasks/email-validator.code-task.md
+Generated code task: __session__.tasks_dir/email-validator.code-task.md
 
 Created task for email validation functionality with comprehensive acceptance criteria and implementation guidance.
 
@@ -283,14 +289,14 @@ Next steps: Run code-assist on the generated task to implement the solution.
 
 ### Example Input (PDD Mode)
 ```
-input: "planning/implementation/plan.md"
+input: "__session__.plan_dir/implementation/plan.md"
 ```
 
 ### Example Output (PDD Mode)
 ```
 Detected mode: pdd
 
-Generated code tasks for step 2: planning/implementation/step02/
+Generated code tasks for step 2: __session__.tasks_dir/step02/
 
 Created tasks:
 - task-01-create-data-models.code-task.md
@@ -325,7 +331,7 @@ If technical implementation details are unclear:
 ### Plan File Not Found (PDD Mode)
 If the specified plan file doesn't exist:
 - You SHOULD check if the path is a directory and look for plan.md within it
-- You SHOULD suggest common locations where PDD plans might be stored
+- You SHOULD check the default location: `__session__.plan_dir`/implementation/plan.md
 - You SHOULD validate the file path format and suggest corrections
 
 ### Invalid Plan Format (PDD Mode)
