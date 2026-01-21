@@ -117,7 +117,14 @@ Create appropriate file structure based on mode and approved plan.
 - For PDD mode: You MUST include specific research documents in "Additional References" only if they are directly relevant to the task (e.g., specific technology research for that component)
 - For PDD mode: You MUST add a note instructing agents to read the detailed design before implementation
 - For description mode: You MUST create single task or multiple tasks as planned in `__session__.tasks_dir`
-- You MUST add YAML frontmatter with `status: pending`, `created: <current date in YYYY-MM-DD format>`, `started: null`, `completed: null`
+- You MUST add YAML frontmatter with `status: pending`, `created: <current date in YYYY-MM-DD format>`, `started: null`, `completed: null`, `target_repo: <path or null>`
+
+**Multi-Repository Support:**
+- If a task targets a different repository than the current session, You MUST include `target_repo` in the frontmatter with the full path (e.g., `~/dev/AVPStreamKit`)
+- You MUST include a "Target Repository" section at the top of the task body with the full path
+- You MUST add a warning: "IMPORTANT: Before starting implementation, you MUST `cd` to the target repository."
+- If the task targets the current repository, use `target_repo: null` and "Target Repository: Current repository"
+- For cross-repo features, all tasks are still stored in the central session's `__session__.tasks_dir` - only the target_repo indicates where to work
 - You MUST generate task names using kebab-case format
 - You MUST create files with `.code-task.md` extension
 - You MUST follow the exact format specified in the Code Task Format section below
@@ -173,8 +180,14 @@ status: pending
 created: YYYY-MM-DD
 started: null
 completed: null
+target_repo: [path or null]
 ---
 # Task: [Task Name]
+
+## Target Repository
+[Full path to the repository where this work should be done, or "Current repository" if same as session]
+
+**IMPORTANT:** Before starting implementation, you MUST `cd` to the target repository.
 
 ## Description
 [A clear description of what needs to be implemented and why]
@@ -230,8 +243,14 @@ status: pending
 created: 2026-01-15
 started: null
 completed: null
+target_repo: ~/dev/AVPStreamKit
 ---
 # Task: Create Email Validator Function
+
+## Target Repository
+~/dev/AVPStreamKit
+
+**IMPORTANT:** Before starting implementation, you MUST `cd` to the target repository.
 
 ## Description
 Create a function that validates email addresses and returns detailed error messages for invalid formats. This will be used across the application to ensure data quality and provide user-friendly feedback.
