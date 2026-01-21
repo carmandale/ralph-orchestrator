@@ -11,6 +11,21 @@ version: "1.0"
 
 This sop generates structured code task files from rough descriptions, ideas, or PDD implementation plans. It automatically detects the input type and creates properly formatted code task files following Amazon's code task format specification. For PDD plans, it processes implementation steps one at a time to allow for learning and adaptation between steps.
 
+## Workflow Context
+
+This SOP is step 2 of 3 in the ralph-o workflow:
+
+```
+ralph-o plan  →  ralph-o task  →  ralph-o run
+ (completed)        (YOU)          (next step)
+   
+Created:          Creates:          Executes:
+- Design doc      - Code tasks      - Implementation
+- Impl plan       - PROMPT.md       - Tests
+```
+
+**Your role:** Create code task files ONLY. Do not implement code.
+
 ## Parameters
 
 - **input** (optional): Task description, file path, or PDD plan path. Can be a simple sentence, paragraph, detailed explanation, or path to a PDD implementation plan. If not provided, defaults to the session's plan.md.
@@ -123,9 +138,9 @@ Inform user about generated tasks and next steps.
 - For PDD mode: You MUST NOT create any additional log files or summary documents
 - For description mode: You MUST offer to create additional related tasks if the scope seems large
 
-### 7. Offer Ralph Integration
+### 7. Offer Ralph Integration and Direct to Next Step
 
-After generating code tasks, offer to create a PROMPT.md file for Ralph.
+After generating code tasks, offer to create a PROMPT.md file for Ralph, then direct to the next workflow step.
 
 **Constraints:**
 - You MUST ask the user: "Would you like me to create a PROMPT.md for Ralph to implement these tasks?"
@@ -135,7 +150,16 @@ After generating code tasks, offer to create a PROMPT.md file for Ralph.
   - Suggested execution order
   - Brief acceptance criteria
 - The PROMPT.md should be concise - Ralph will read the task files for details
-- If the user declines, You SHOULD acknowledge and conclude the session
+- After PROMPT.md creation (or if declined), You MUST tell the user: "Task generation complete. Run `ralph-o run` to execute."
+
+**Workflow Boundaries (CRITICAL):**
+- This SOP's job is TASK GENERATION ONLY - creating structured code task files
+- You MUST NOT offer to implement the tasks yourself
+- You MUST NOT offer to "get started on the code" or "begin implementation"
+- You MUST NOT write any implementation code - only task specification files
+- Actual implementation is handled by `ralph-o run` (a separate command)
+- The workflow is: `ralph-o plan` → `ralph-o task` → `ralph-o run`
+- Skipping steps breaks the structured workflow and reduces quality
 
 ## Code Task Format Specification
 

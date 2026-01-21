@@ -11,6 +11,21 @@ version: "1.0"
 
 This sop guides you through the process of transforming a rough idea into a detailed design document with an implementation plan and todo list. It follows the Prompt-Driven Development methodology to systematically refine your idea, conduct necessary research, create a comprehensive design, and develop an actionable implementation plan. The process is designed to be iterative, allowing movement between requirements clarification and research as needed.
 
+## Workflow Context
+
+This SOP is step 1 of 3 in the ralph-o workflow:
+
+```
+ralph-o plan  →  ralph-o task  →  ralph-o run
+   (YOU)          (next step)      (execution)
+   
+Creates:         Creates:          Executes:
+- Design doc     - Code tasks      - Implementation
+- Impl plan      - PROMPT.md       - Tests
+```
+
+**Your role:** Create planning artifacts ONLY. Do not generate code tasks or implement.
+
 ## Parameters
 
 - **rough_idea** (required): The initial concept or idea you want to develop into a detailed design
@@ -223,20 +238,22 @@ Provide a summary of all artifacts created and next steps.
 - You SHOULD highlight any areas that may need further refinement
 - You MUST present this summary to the user in the conversation
 
-### 9. Offer Ralph Integration
+### 9. Direct to Next Workflow Step
 
-After completing the planning process, offer to create a PROMPT.md file for Ralph.
+After completing the planning process, direct the user to the next step in the ralph-o workflow.
 
 **Constraints:**
-- You MUST ask the user: "Would you like me to create a PROMPT.md for Ralph to implement this?"
-- If the user agrees, You MUST create a minimal PROMPT.md file in the project root containing:
-  - A clear objective statement
-  - Key requirements (bulleted list)
-  - Acceptance criteria
-  - Reference to the detailed design document
-- The PROMPT.md should be concise (under 100 lines) - Ralph will read the detailed design
-- You MUST NOT include the full design content in PROMPT.md - just reference the design file path
-- If the user declines, You SHOULD acknowledge and conclude the session
+- You MUST tell the user: "Planning complete. Next step: run `ralph-o task` to generate structured code tasks from your implementation plan."
+- You MUST NOT offer to create PROMPT.md - that happens after task generation
+- You MUST NOT offer to implement anything yourself - implementation happens via `ralph-o run`
+- You MUST NOT offer to "get started on the code" or similar
+- You MUST explain the workflow: `ralph-o plan` → `ralph-o task` → `ralph-o run`
+
+**Workflow Boundaries (CRITICAL):**
+- This SOP's job is PLANNING ONLY - creating design documents and implementation plans
+- Code task generation is handled by `ralph-o task` (a separate command)
+- Actual implementation is handled by `ralph-o run` (a separate command)
+- Skipping steps breaks the structured workflow and reduces quality
 
 ## Examples
 
@@ -291,10 +308,11 @@ The implementation plan breaks down the work into 12 incremental steps, starting
 
 ## Next Steps
 1. Review the detailed design document at `__session__.plan_dir`/design/detailed-design.md
-2. Check the implementation plan and checklist at `__session__.plan_dir`/implementation/plan.md
-3. Begin implementation following the checklist in the implementation plan
+2. Check the implementation plan at `__session__.plan_dir`/implementation/plan.md
+3. Run `ralph-o task` to generate structured code tasks from the implementation plan
+4. Run `ralph-o run` to execute the tasks
 
-Would you like me to explain any specific part of the design or implementation plan in more detail?
+Planning complete. Run `ralph-o task` when ready to proceed.
 ```
 
 ## Troubleshooting
