@@ -24,6 +24,10 @@ This sop generates structured code task files from rough descriptions, ideas, or
 - Default PDD plan location: `__session__.plan_dir`/implementation/plan.md
 - All generated tasks will be stored in `__session__.tasks_dir`
 
+**Output Formatting:**
+- When reporting file paths to the user, You MUST always use the full absolute path (the actual value of `__session__.tasks_dir`, not the literal string)
+- Example: "Created task at .ralph-o/sessions/001-my-feature/tasks/step01/task-01-setup.code-task.md" (NOT "tasks/step01/...")
+
 **Constraints for parameter acquisition:**
 - You MUST ask for all required parameters upfront in a single prompt rather than one at a time
 - You MUST support multiple input methods for input including:

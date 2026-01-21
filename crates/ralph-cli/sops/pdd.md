@@ -19,6 +19,10 @@ This sop guides you through the process of transforming a rough idea into a deta
 - The session's plan directory is automatically provided via `__session__.plan_dir`
 - All artifacts will be stored in the session's plan directory structure
 
+**Output Formatting:**
+- When reporting file paths to the user, You MUST always use the full absolute path (the actual value of `__session__.plan_dir`, not the literal string)
+- Example: "Created detailed design at .ralph-o/sessions/001-my-feature/plan/design/detailed-design.md" (NOT "plan/design/detailed-design.md")
+
 **Constraints for parameter acquisition:**
 - You MUST ask for all required parameters upfront in a single prompt rather than one at a time
 - You MUST support multiple input methods including:
