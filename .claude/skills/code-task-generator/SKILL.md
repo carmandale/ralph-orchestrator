@@ -170,16 +170,16 @@ Inform user about generated tasks and next steps.
 After generating code tasks, offer to create a PROMPT.md file for Ralph, then direct to the next workflow step.
 
 **Constraints:**
-- You MUST ask the user: "Would you like me to create a PROMPT.md for Ralph to implement these tasks?"
-- If the user agrees, You MUST create a minimal PROMPT.md file in the session directory (`__session__.dir`) containing:
+- You MUST tell the user: "The next step in the workflow is to create PROMPT.md for execution. Proceeding..."
+- You MUST create a minimal PROMPT.md file in the session directory (`__session__.dir`) containing:
   - A clear objective statement (what to implement)
   - Reference to the generated code task files
   - Suggested execution order
   - Brief acceptance criteria
 - The PROMPT.md should be concise - Ralph will read the task files for details
-- After PROMPT.md creation (or if declined), You MUST run `ralph-o status` to verify all artifacts are complete
+- After PROMPT.md creation, You MUST run `ralph-o status` to verify all artifacts are complete
 - You MUST show the user the status output so they can confirm readiness
-- You MUST tell the user: "Task generation complete. Run `ralph-o run` to execute."
+- You MUST tell the user: "Task generation complete. Next step: `ralph-o run`"
 
 **Workflow Boundaries (CRITICAL):**
 - This SOP's job is TASK GENERATION ONLY - creating structured code task files
