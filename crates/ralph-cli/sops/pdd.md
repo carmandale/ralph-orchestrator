@@ -14,7 +14,10 @@ This sop guides you through the process of transforming a rough idea into a deta
 ## Parameters
 
 - **rough_idea** (required): The initial concept or idea you want to develop into a detailed design
-- **project_dir** (optional, default: ".sop/planning"): The base directory where all project files will be stored
+
+**Session Context:**
+- The session's plan directory is automatically provided via `__session__.plan_dir`
+- All artifacts will be stored in the session's plan directory structure
 
 **Constraints for parameter acquisition:**
 - You MUST ask for all required parameters upfront in a single prompt rather than one at a time
@@ -26,8 +29,6 @@ This sop guides you through the process of transforming a rough idea into a deta
 - You MUST use appropriate tools to access content based on the input method
 - You MUST confirm successful acquisition of all parameters before proceeding
 - You SHOULD save the acquired rough idea to a consistent location for use in subsequent steps
-- You MUST NOT overwrite the existing project directory because this could destroy previous work and cause data loss
-- You MUST ask for project_dir if it is not given and default ".sop/planning" directory already exist and has contents from previous iteration
 
 ## Steps
 
@@ -36,17 +37,16 @@ This sop guides you through the process of transforming a rough idea into a deta
 Set up a directory structure to organize all artifacts created during the process.
 
 **Constraints:**
-- You MUST create the specified project directory if it doesn't already exist
-- You MUST create the following files:
-  - {project_dir}/rough-idea.md (containing the provided rough idea)
-  - {project_dir}/idea-honing.md (for requirements clarification)
-- You MUST create the following subdirectories:
-  - {project_dir}/research/ (directory for research notes)
-  - {project_dir}/design/ (directory for design documents)
-  - {project_dir}/implementation/ (directory for implementation plans)
+- You MUST use the session's plan directory provided in `__session__.plan_dir`
+- You MUST create the following files in the plan directory:
+  - `__session__.plan_dir`/rough-idea.md (containing the provided rough idea)
+  - `__session__.plan_dir`/idea-honing.md (for requirements clarification)
+- You MUST create the following subdirectories in the plan directory:
+  - `__session__.plan_dir`/research/ (directory for research notes)
+  - `__session__.plan_dir`/design/ (directory for design documents)
+  - `__session__.plan_dir`/implementation/ (directory for implementation plans)
 - You MUST notify the user when the structure has been created
-- You MUST prompt the user to add all project files to Q's context using the command: `/context add {project_dir}/**/*.md`
-- You MUST explain that this will ensure all project files remain in context throughout the process
+- You SHOULD explain that all artifacts are stored in the session's plan directory for organization
 
 ### 2. Initial Process Planning
 
@@ -67,17 +67,17 @@ Determine the initial approach and sequence for requirements clarification and r
 Guide the user through a series of questions to refine the initial idea and develop a thorough specification.
 
 **Constraints:**
-- You MUST create an empty {project_dir}/idea-honing.md file if it doesn't already exist
+- You MUST create an empty `__session__.plan_dir`/idea-honing.md file if it doesn't already exist
 - You MUST ask ONLY ONE question at a time and wait for the user's response before asking the next question
 - You MUST NOT list multiple questions for the user to answer at once because this overwhelms users and leads to incomplete responses
 - You MUST NOT pre-populate answers to questions without user input because this assumes user preferences without confirmation
 - You MUST NOT write multiple questions and answers to the idea-honing.md file at once because this skips the interactive clarification process
 - You MUST follow this exact process for each question:
   1. Formulate a single question
-  2. Append the question to {project_dir}/idea-honing.md
+  2. Append the question to `__session__.plan_dir`/idea-honing.md
   3. Present the question to the user in the conversation
   4. Wait for the user's complete response, which may require brief back-and-forth dialogue across multiple turns.
-  5. Once you have their complete response, append the user's answer (or final decision) to {project_dir}/idea-honing.md
+  5. Once you have their complete response, append the user's answer (or final decision) to `__session__.plan_dir`/idea-honing.md
   6. Only then proceed to formulating the next question
 - You MAY suggest possible answers when asking a question, but MUST wait for the user's actual response
 - You MUST format the idea-honing.md document with clear question and answer sections
@@ -106,8 +106,8 @@ Conduct research on relevant technologies, libraries, or existing code that coul
   - Specific resources (files, websites, internal tools) the user recommends
   - Areas where the user has existing knowledge to contribute
 - You MUST incorporate user suggestions into the research plan
-- You MUST document research findings in separate markdown files in the {project_dir}/research/ directory
-- You SHOULD organize research by topic (e.g., {project_dir}/research/existing-code.md, {project_dir}/research/technologies.md)
+- You MUST document research findings in separate markdown files in the `__session__.plan_dir`/research/ directory
+- You SHOULD organize research by topic (e.g., `__session__.plan_dir`/research/existing-code.md, `__session__.plan_dir`/research/technologies.md)
 - You MUST include mermaid diagrams when documenting system architectures, data flows, or component relationships in research
 - You MUST include links to relevant references and sources when research is based on external materials (websites, documentation, articles, etc.)
 - You MAY use tools like search_internal_code, read_internal_website, or fs_read to gather information
@@ -142,7 +142,7 @@ Determine if further requirements clarification or research is needed before pro
 Develop a comprehensive design document based on the requirements and research.
 
 **Constraints:**
-- You MUST create a detailed design document at {project_dir}/design/detailed-design.md
+- You MUST create a detailed design document at `__session__.plan_dir`/design/detailed-design.md
 - You MUST write the design as a standalone document that can be understood without reading other project files
 - You MUST include the following sections in the design document:
   - Overview
@@ -171,7 +171,7 @@ Develop a comprehensive design document based on the requirements and research.
 Create a structured implementation plan with a series of steps for implementing the design.
 
 **Constraints:**
-- You MUST create an implementation plan at {project_dir}/implementation/plan.md
+- You MUST create an implementation plan at `__session__.plan_dir`/implementation/plan.md
 - You MUST include a checklist at the beginning of the plan.md file to track implementation progress
 - You MUST use the following specific instructions when creating the implementation plan:
   ```
@@ -202,7 +202,7 @@ Create a structured implementation plan with a series of steps for implementing 
 Provide a summary of all artifacts created and next steps.
 
 **Constraints:**
-- You MUST create a summary document at {project_dir}/summary.md
+- You MUST create a summary document at `__session__.plan_dir`/summary.md
 - You MUST list all artifacts created during the process
 - You MUST provide a brief overview of the design and implementation plan
 - You MUST suggest next steps for the user
@@ -230,8 +230,6 @@ After completing the planning process, offer to create a PROMPT.md file for Ralp
 
 ```
 Rough idea: I want to build a feature for our team's internal tool that allows users to create and manage templates for common documents we produce. Users should be able to create, edit, and share templates, as well as use them to generate new documents with custom fields.
-
-Project directory: docs/template-feature
 ```
 
 ### Example Output
@@ -254,7 +252,7 @@ I notice you have several additional MCP search tools available beyond the stand
 I've completed the transformation of your rough idea into a detailed design with an implementation plan. Here's what was created:
 
 ## Directory Structure
-- docs/template-feature/
+- __session__.plan_dir/
   - rough-idea.md (your initial concept)
   - idea-honing.md (our Q&A requirements clarification)
   - research/
@@ -278,8 +276,8 @@ I've completed the transformation of your rough idea into a detailed design with
 The implementation plan breaks down the work into 12 incremental steps, starting with core data models and building up to the complete feature set.
 
 ## Next Steps
-1. Review the detailed design document at docs/template-feature/design/detailed-design.md
-2. Check the implementation plan and checklist at docs/template-feature/implementation/plan.md
+1. Review the detailed design document at `__session__.plan_dir`/design/detailed-design.md
+2. Check the implementation plan and checklist at `__session__.plan_dir`/implementation/plan.md
 3. Begin implementation following the checklist in the implementation plan
 
 Would you like me to explain any specific part of the design or implementation plan in more detail?
