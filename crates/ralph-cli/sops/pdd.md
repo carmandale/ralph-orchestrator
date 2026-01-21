@@ -145,7 +145,17 @@ Determine if further requirements clarification or research is needed before pro
 
 Develop a comprehensive design document based on the requirements and research.
 
-**Constraints:**
+**Project Context Validation (BEFORE writing the design):**
+- You MUST read AGENTS.md (if present) to understand project conventions, North Star principles, and anti-patterns to avoid
+- You MUST examine the existing codebase for established patterns before proposing new ones:
+  - Search for existing data models, view patterns, and architectural conventions
+  - Identify which frameworks/libraries are already in use (e.g., `@Observable` vs `@Published`, Combine vs async/await)
+  - Note any project-specific abstractions or base classes
+- You MUST check for relevant technology skills in the user's skill library and load them if applicable (e.g., swift-concurrency-expert, swiftui-ui-patterns, swiftui-liquid-glass)
+- You MUST NOT propose patterns that conflict with existing codebase conventions without explicitly noting the deviation and getting user approval
+- You SHOULD document discovered project patterns in an appendix section: "Existing Codebase Patterns"
+
+**Design Document Constraints:**
 - You MUST create a detailed design document at `__session__.plan_dir`/design/detailed-design.md
 - You MUST write the design as a standalone document that can be understood without reading other project files
 - You MUST include the following sections in the design document:
