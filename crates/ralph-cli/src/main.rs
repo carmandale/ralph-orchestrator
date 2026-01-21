@@ -230,6 +230,9 @@ enum Commands {
 
     /// List all sessions with their status
     List(ListArgs),
+
+    /// Show current session status and readiness for next step
+    Status(StatusArgs),
 }
 
 /// Arguments for the init subcommand.
@@ -462,6 +465,10 @@ struct TaskArgs {
 #[derive(Parser, Debug)]
 struct ListArgs {}
 
+/// Arguments for the status subcommand.
+#[derive(Parser, Debug)]
+struct StatusArgs {}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Install panic hook to restore terminal state on crash
@@ -510,6 +517,7 @@ async fn main() -> Result<()> {
         Some(Commands::Plan(args)) => plan_command(cli.config, cli.color, args),
         Some(Commands::Task(args)) => task_command(cli.config, cli.color, args),
         Some(Commands::List(args)) => list_command(cli.config, cli.color, args),
+        Some(Commands::Status(_args)) => status_command(cli.config, cli.color),
         None => {
             // Default to run with no overrides (backwards compatibility)
             let args = RunArgs {
@@ -1448,6 +1456,116 @@ fn list_command(_config_path: PathBuf, color_mode: ColorMode, _args: ListArgs) -
                 marker, session.number, session.title, status_str, created_str
             );
         }
+    }
+
+    Ok(())
+}
+
+/// Shows current session status and readiness for next workflow step.
+fn status_command(config_path: PathBuf, color_mode: ColorMode) -> Result<()> {
+    let use_colors = color_mode.should_use_colors();
+
+    // Determine project root from config path or current directory
+    let project_root = config_path
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+    let session_manager = SessionManager::new(&project_root);
+
+    // Get current session
+    let session = match session_manager.current()? {
+        Some(s) => s,
+        None => {
+            if use_colors {
+                println!("{}No current session.{} Run 'ralph-o plan' to create one.", colors::RED, colors::RESET);
+            } else {
+                println!("No current session. Run 'ralph-o plan' to create one.");
+            }
+            return Ok(());
+        }
+    };
+
+    // Print session info
+    if use_colors {
+        println!("{}📍 Current Session:{} {}", colors::CYAN, colors::RESET, session.id);
+    } else {
+        println!("Current Session: {}", session.id);
+    }
+    
+    if let Some(desc) = session.description() {
+        println!("   Feature: {}", desc);
+    }
+    println!("   Path: {}", session.path.display());
+    println!();
+
+    // Check required files for each workflow step
+    let check = |exists: bool, name: &str| {
+        if use_colors {
+            if exists {
+                println!("   {}✓{} {}", colors::GREEN, colors::RESET, name);
+            } else {
+                println!("   {}✗{} {}", colors::RED, colors::RESET, name);
+            }
+        } else {
+            let mark = if exists { "✓" } else { "✗" };
+            println!("   {} {}", mark, name);
+        }
+        exists
+    };
+
+    // PDD artifacts
+    if use_colors {
+        println!("{}Planning (ralph-o plan):{}", colors::DIM, colors::RESET);
+    } else {
+        println!("Planning (ralph-o plan):");
+    }
+    let has_rough_idea = check(session.rough_idea_path().exists(), "rough-idea.md");
+    let has_idea_honing = check(session.plan_dir().join("idea-honing.md").exists(), "idea-honing.md");
+    let has_design = check(session.plan_dir().join("design").join("detailed-design.md").exists(), "design/detailed-design.md");
+    let has_plan = check(session.plan_dir().join("implementation").join("plan.md").exists(), "implementation/plan.md");
+    
+    let planning_ready = has_rough_idea && has_idea_honing && has_design && has_plan;
+    println!();
+
+    // Task artifacts
+    if use_colors {
+        println!("{}Task Generation (ralph-o task):{}", colors::DIM, colors::RESET);
+    } else {
+        println!("Task Generation (ralph-o task):");
+    }
+    let tasks_dir = session.tasks_dir();
+    let has_tasks = tasks_dir.exists() && fs::read_dir(&tasks_dir).map(|mut d| d.next().is_some()).unwrap_or(false);
+    check(has_tasks, "tasks/ (code task files)");
+    let has_prompt = check(session.prompt_path().exists(), "PROMPT.md");
+    
+    let tasks_ready = has_tasks && has_prompt;
+    println!();
+
+    // Execution artifacts
+    if use_colors {
+        println!("{}Execution (ralph-o run):{}", colors::DIM, colors::RESET);
+    } else {
+        println!("Execution (ralph-o run):");
+    }
+    check(session.scratchpad_path().exists(), "scratchpad.md");
+    check(session.events_path().exists(), "events.jsonl");
+    println!();
+
+    // Next step recommendation
+    if use_colors {
+        print!("{}▶ Next step:{} ", colors::CYAN, colors::RESET);
+    } else {
+        print!("Next step: ");
+    }
+    
+    if !planning_ready {
+        println!("Run 'ralph-o plan' to complete planning artifacts");
+    } else if !tasks_ready {
+        println!("Run 'ralph-o task' to generate code tasks and PROMPT.md");
+    } else {
+        println!("Run 'ralph-o run' to execute implementation");
     }
 
     Ok(())

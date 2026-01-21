@@ -238,11 +238,13 @@ Provide a summary of all artifacts created and next steps.
 - You SHOULD highlight any areas that may need further refinement
 - You MUST present this summary to the user in the conversation
 
-### 9. Direct to Next Workflow Step
+### 9. Verify and Direct to Next Workflow Step
 
-After completing the planning process, direct the user to the next step in the ralph-o workflow.
+After completing the planning process, verify all artifacts are in place and direct the user to the next step.
 
 **Constraints:**
+- You MUST run `ralph-o status` to verify all planning artifacts are complete
+- You MUST show the user the status output so they can confirm readiness
 - You MUST tell the user: "Planning complete. Next step: run `ralph-o task` to generate structured code tasks from your implementation plan."
 - You MUST NOT offer to create PROMPT.md - that happens after task generation
 - You MUST NOT offer to implement anything yourself - implementation happens via `ralph-o run`

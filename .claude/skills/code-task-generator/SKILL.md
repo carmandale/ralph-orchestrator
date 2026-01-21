@@ -150,7 +150,9 @@ After generating code tasks, offer to create a PROMPT.md file for Ralph, then di
   - Suggested execution order
   - Brief acceptance criteria
 - The PROMPT.md should be concise - Ralph will read the task files for details
-- After PROMPT.md creation (or if declined), You MUST tell the user: "Task generation complete. Run `ralph-o run` to execute."
+- After PROMPT.md creation (or if declined), You MUST run `ralph-o status` to verify all artifacts are complete
+- You MUST show the user the status output so they can confirm readiness
+- You MUST tell the user: "Task generation complete. Run `ralph-o run` to execute."
 
 **Workflow Boundaries (CRITICAL):**
 - This SOP's job is TASK GENERATION ONLY - creating structured code task files
