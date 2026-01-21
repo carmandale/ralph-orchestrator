@@ -92,7 +92,27 @@ Organize requirements and determine task breakdown based on mode.
 - You MUST create measurable acceptance criteria using Given-When-Then format
 - You MUST prepare task breakdown plan for approval
 
-### 4. Plan Tasks
+### 4. Check Target Repository Status
+
+Before planning tasks, verify the git status of all target repositories.
+
+**Constraints:**
+- You MUST run `git status` in each target repository identified in the step
+- You MUST categorize dirty files as:
+  - **Critical (BLOCKING):** Source code files (.swift, .ts, .py, etc.) that the tasks will modify
+  - **Non-critical (WARNING):** `.beads/last-touched`, `.beads/*.db`, `*.lock`, `.DS_Store`, `-wal`, `-shm` files
+  - **Requires attention:** Other dirty files not in the above categories
+- If there are CRITICAL dirty files:
+  - You MUST list them clearly
+  - You MUST ask the user: "These files are dirty and may be modified by the tasks. Options: (1) Commit/stash them first, (2) Proceed anyway (risky), (3) Abort"
+  - You MUST NOT proceed without explicit user approval
+- If there are only non-critical dirty files:
+  - You SHOULD note them but MAY proceed
+- If the repo is clean:
+  - You SHOULD confirm: "✓ Repository is clean"
+- You MUST check ALL repos that will be touched by the step (may be multiple)
+
+### 5. Plan Tasks
 
 Present task breakdown for user approval before generation.
 
@@ -104,7 +124,7 @@ Present task breakdown for user approval before generation.
 - You MUST allow user to request modifications to the task breakdown
 - You MUST NOT proceed to generate actual code task files until user explicitly approves
 
-### 5. Generate Tasks
+### 6. Generate Tasks
 
 Create appropriate file structure based on mode and approved plan.
 
@@ -133,7 +153,7 @@ Create appropriate file structure based on mode and approved plan.
 - You MUST NOT create separate tasks for "add unit tests" or "write tests" because testing should be integrated into each functional implementation task
 - You MUST provide realistic complexity assessment and required skills
 
-### 6. Report Results
+### 7. Report Results
 
 Inform user about generated tasks and next steps.
 
@@ -145,7 +165,7 @@ Inform user about generated tasks and next steps.
 - For PDD mode: You MUST NOT create any additional log files or summary documents
 - For description mode: You MUST offer to create additional related tasks if the scope seems large
 
-### 7. Offer Ralph Integration and Direct to Next Step
+### 8. Offer Ralph Integration and Direct to Next Step
 
 After generating code tasks, offer to create a PROMPT.md file for Ralph, then direct to the next workflow step.
 
