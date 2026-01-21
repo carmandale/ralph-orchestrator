@@ -2725,6 +2725,33 @@ fn get_last_commit_info() -> Option<String> {
     }
 }
 
+/// Extracts task statistics from a scratchpad file.
+/// Returns (completed, pending, cancelled) counts.
+fn extract_task_stats(scratchpad_path: &Path) -> Option<(usize, usize, usize)> {
+    let content = fs::read_to_string(scratchpad_path).ok()?;
+
+    let mut completed = 0;
+    let mut pending = 0;
+    let mut cancelled = 0;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("- [x]") {
+            completed += 1;
+        } else if trimmed.starts_with("- [ ]") {
+            pending += 1;
+        } else if trimmed.starts_with("- [~]") {
+            cancelled += 1;
+        }
+    }
+
+    if completed + pending + cancelled == 0 {
+        None  // No tasks found
+    } else {
+        Some((completed, pending, cancelled))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
