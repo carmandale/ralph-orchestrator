@@ -38,18 +38,26 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct SummaryWriter {
     path: PathBuf,
+    events_path: PathBuf,
 }
 
 impl Default for SummaryWriter {
     fn default() -> Self {
-        Self::new(".agent/summary.md")
+        Self::new(".agent/summary.md", ".agent/events.jsonl")
     }
 }
 
 impl SummaryWriter {
-    /// Creates a new summary writer with the given path.
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    /// Creates a new summary writer with the given paths.
+    ///
+    /// # Arguments
+    /// * `summary_path` - Path where summary.md will be written
+    /// * `events_path` - Path where events.jsonl is located (for reading event history)
+    pub fn new(summary_path: impl Into<PathBuf>, events_path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: summary_path.into(),
+            events_path: events_path.into(),
+        }
     }
 
     /// Writes the summary file based on loop state and termination reason.
@@ -161,7 +169,7 @@ impl SummaryWriter {
 
     /// Summarizes events from the event history file.
     fn summarize_events(&self) -> String {
-        let history = EventHistory::default_path();
+        let history = EventHistory::new(&self.events_path);
 
         let records = match history.read_all() {
             Ok(r) => r,
@@ -313,8 +321,9 @@ More text here.
     fn test_write_creates_directory() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("nested/dir/summary.md");
+        let events_path = tmp.path().join("events.jsonl");
 
-        let writer = SummaryWriter::new(&path);
+        let writer = SummaryWriter::new(&path, &events_path);
         let state = test_state();
 
         writer

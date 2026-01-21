@@ -416,9 +416,9 @@ struct EmitArgs {
     #[arg(long)]
     pub ts: Option<String>,
 
-    /// Path to events file (defaults to .agent/events.jsonl)
-    #[arg(long, default_value = ".agent/events.jsonl")]
-    pub file: PathBuf,
+    /// Path to events file (defaults to current session's events.jsonl)
+    #[arg(long)]
+    pub file: Option<PathBuf>,
 }
 
 /// Arguments for the plan subcommand.
@@ -1181,6 +1181,25 @@ fn clean_command(config_path: PathBuf, color_mode: ColorMode, args: CleanArgs) -
 fn emit_command(color_mode: ColorMode, args: EmitArgs) -> Result<()> {
     let use_colors = color_mode.should_use_colors();
 
+    // Resolve events file path:
+    // 1. Use explicit --file if provided
+    // 2. Otherwise, try to find current session
+    // 3. Fall back to legacy .agent/events.jsonl
+    let events_file = if let Some(file) = args.file {
+        file
+    } else {
+        // Try to get current session
+        let project_root = std::env::current_dir()?;
+        let session_manager = SessionManager::new(&project_root);
+
+        if let Ok(Some(session)) = session_manager.current() {
+            session.events_path()
+        } else {
+            // Fallback to legacy path
+            PathBuf::from(".agent/events.jsonl")
+        }
+    };
+
     // Generate timestamp if not provided
     let ts = args.ts.unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
@@ -1209,7 +1228,7 @@ fn emit_command(color_mode: ColorMode, args: EmitArgs) -> Result<()> {
     });
 
     // Ensure parent directory exists
-    if let Some(parent) = args.file.parent()
+    if let Some(parent) = events_file.parent()
         && !parent.as_os_str().is_empty()
     {
         fs::create_dir_all(parent)
@@ -1220,8 +1239,8 @@ fn emit_command(color_mode: ColorMode, args: EmitArgs) -> Result<()> {
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&args.file)
-        .with_context(|| format!("Failed to open events file: {}", args.file.display()))?;
+        .open(&events_file)
+        .with_context(|| format!("Failed to open events file: {}", events_file.display()))?;
 
     // Write as single-line JSON (JSONL format)
     let json_line = serde_json::to_string(&record)?;
@@ -2123,11 +2142,13 @@ async fn run_loop_impl(
     const MAX_FALLBACK_ATTEMPTS: u32 = 3;
 
     // Helper closure to handle termination (writes summary, prints status)
-    let handle_termination = |reason: &TerminationReason,
+    let summary_path = config.core.summary_file.clone();
+    let events_file = config.core.events_file.clone();
+    let handle_termination = move |reason: &TerminationReason,
                               state: &ralph_core::LoopState,
                               scratchpad: &str| {
         // Per spec: Write summary file on termination
-        let summary_writer = SummaryWriter::default();
+        let summary_writer = SummaryWriter::new(&summary_path, &events_file);
         let scratchpad_path = std::path::Path::new(scratchpad);
         let scratchpad_opt = if scratchpad_path.exists() {
             Some(scratchpad_path)
