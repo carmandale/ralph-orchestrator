@@ -448,6 +448,10 @@ struct PlanArgs {
 /// code-task-generator SOP, bypassing Ralph's event loop entirely.
 #[derive(Parser, Debug)]
 struct TaskArgs {
+    /// Session ID or number to use (e.g., "4", "004", "004-feature-name")
+    #[arg(long)]
+    session: Option<String>,
+
     /// Input: description text or path to PDD plan file
     #[arg(value_name = "INPUT")]
     input: Option<String>,
@@ -1361,14 +1365,22 @@ fn task_command(config_path: PathBuf, color_mode: ColorMode, args: TaskArgs) -> 
         .and_then(|p| p.parent())
         .ok_or_else(|| anyhow::anyhow!("Could not determine project root from config path"))?;
 
-    // Initialize SessionManager and get current session
+    // Initialize SessionManager and get session (from --session or current)
     let session_manager = SessionManager::new(project_root);
-    let session = session_manager
-        .current()
-        .context("Failed to get current session")?
-        .ok_or_else(|| {
-            anyhow::anyhow!("No current session. Run 'ralph-o plan' first to create a session.")
-        })?;
+    let session = if let Some(session_id) = &args.session {
+        // Use specified session
+        session_manager
+            .get(session_id)
+            .with_context(|| format!("Session '{}' not found", session_id))?
+    } else {
+        // Use current session
+        session_manager
+            .current()
+            .context("Failed to get current session")?
+            .ok_or_else(|| {
+                anyhow::anyhow!("No current session. Run 'ralph-o plan' first or use --session to specify one.")
+            })?
+    };
 
     // Determine input: use provided input, or default to plan/implementation/plan.md
     let user_input = if let Some(input) = args.input {
