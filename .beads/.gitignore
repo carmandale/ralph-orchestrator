@@ -43,3 +43,16 @@ sync_base.jsonl
 # The JSONL files (issues.jsonl, interactions.jsonl) and config files
 # are tracked by git by default since no pattern above ignores them.
 export-state/
+
+# br history snapshots (runtime, not tracked)
+.br_history/
+
+# br runtime locks — zero-byte, per-invocation, left behind after the process
+# exits. A blocklist of exact names loses to the next name br invents; the glob
+# does not. Patterns copied from agent-config/.beads/.gitignore, which is the
+# canonical set. Without these, .git/hooks/pre-push refuses every push in this
+# repo because `git status --porcelain -- .beads/` is never empty.
+.jsonl.lock
+.write.lock
+.br-*.lock
+.migration-hint-ts
